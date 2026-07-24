@@ -167,3 +167,21 @@ run_package() {
       || die "package() failed for $name"
   done < <(pkgbuild_names)
 }
+
+# built_vcs_commit <pkgbase> -- HEAD commit of the first git+ source actually
+# built (if any), for --devel tracking via manifest_set's third column. Empty
+# for ordinary (non-VCS) packages.
+built_vcs_commit() {
+  local pkgbase=$1
+  local srcdir="$BUILD_DIR/$pkgbase/src" s url fname
+  for s in "${PB_SOURCE[@]}"; do
+    case "$s" in
+      *"::"*) fname=${s%%::*}; url=${s#*::} ;;
+      *) url=$s; fname=$(basename "${url%%#*}") ;;
+    esac
+    [[ "$url" == git+* ]] || continue
+    if [[ -d "$srcdir/$fname/.git" ]]; then
+      git -C "$srcdir/$fname" rev-parse HEAD 2>/dev/null && return 0
+    fi
+  done
+}

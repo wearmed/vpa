@@ -41,6 +41,9 @@
     "shellcheck",
     "cspell",
     "shfmt",
-    "vur"
+    "vur",
+    "devel",
+    "noconfirm",
+    "vcs"
   ]
 }

@@ -85,3 +85,31 @@ optdep_name() {
   local d=$1
   printf '%s' "${d%%:*}"
 }
+
+# pkgbuild_is_devel -- true if PB_SOURCE has a git+ entry (a VCS/-git-style
+# package), the case --devel exists to handle: pkgver may not change between
+# builds even though upstream has new commits.
+pkgbuild_is_devel() {
+  local s
+  for s in "${PB_SOURCE[@]}"; do
+    [[ "$s" == *"git+"* ]] && return 0
+  done
+  return 1
+}
+
+# pkgbuild_devel_latest_commit -- HEAD commit of the first git+ source's
+# remote, via a cheap `git ls-remote` (no clone needed). Empty if not devel.
+pkgbuild_devel_latest_commit() {
+  local s url real base
+  for s in "${PB_SOURCE[@]}"; do
+    case "$s" in
+      *"::"*) url=${s#*::} ;;
+      *) url=$s ;;
+    esac
+    [[ "$url" == git+* ]] || continue
+    real=${url#git+}
+    base=${real%%#*}
+    git ls-remote "$base" HEAD 2>/dev/null | awk '{print $1; exit}'
+    return 0
+  done
+}

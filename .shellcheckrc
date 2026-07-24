@@ -1,0 +1,4 @@
+# Let shellcheck follow `source "$ROOT/lib/whatever.sh"` (a dynamic path)
+# using the `# shellcheck source=...` hints left above each source line,
+# instead of needing `-x` passed on every invocation.
+external-sources=true
