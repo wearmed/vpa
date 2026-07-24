@@ -1,12 +1,6 @@
 # shellcheck shell=bash
-# Parses a PKGBUILD by actually sourcing it (the only reliable way, since it's bash)
-# and exports its variables into PB_* globals for the rest of vur to use.
-#
-# This only *sources* the file (defines vars/functions), it never calls
-# prepare()/build()/package() here -- that happens later, after the user has
-# had a chance to review the PKGBUILD. Sourcing arbitrary AUR bash is still an
-# inherent trust decision (the same one every AUR helper makes); vur always
-# shows the PKGBUILD and asks for confirmation before this point.
+# Sources a PKGBUILD (the only reliable way to parse it) into PB_* globals.
+# Only defines vars/functions here; build()/package() run later, after review.
 
 _pb_vars=(pkgname pkgbase pkgver pkgrel pkgdesc url install
           arch license depends makedepends checkdepends optdepends
@@ -20,27 +14,21 @@ pkgbuild_load() {
   local dump
   dump=$(
     cd "$dir" || exit 1
-    # PKGBUILDs may call build()/package()/prepare() at parse time only if
-    # they misbehave; we don't invoke them ourselves here.
-    # shellcheck disable=SC1091  # PKGBUILD is fetched at runtime; nothing to statically follow
+    # shellcheck disable=SC1091  # PKGBUILD is fetched at runtime
     source ./PKGBUILD
     for v in "${_pb_vars[@]}"; do
       declare -p "$v" 2>/dev/null || true
     done
   ) || die "failed to parse PKGBUILD in $dir"
 
-  # Clear any PB_* left over from a previous pkgbuild_load call in this shell.
   local v
   for v in "${_pb_vars[@]}"; do
     unset "PB_${v^^}"
   done
 
-  # NOTE: declare (even via eval) inside a function is function-local unless
-  # -g is passed, so PB_* would vanish the instant pkgbuild_load returns
-  # without it.
+  # -g needed: declare via eval inside a function is otherwise function-local
   eval "$(sed -E 's/^declare (\S+) ([a-zA-Z_][a-zA-Z0-9_]*)=/declare -g \1 PB_\U\2\E=/' <<<"$dump")"
 
-  # Normalize scalars that might be missing into empty-but-defined values.
   PB_PKGVER=${PB_PKGVER:-}
   PB_PKGREL=${PB_PKGREL:-1}
   PB_PKGDESC=${PB_PKGDESC:-}
@@ -71,9 +59,7 @@ strdep() {
   printf '%s' "$d"
 }
 
-# depver <depstring> -> the version-constraint suffix (e.g. ">=4.0.0"), or
-# empty if the depstring had no operator. xbps uses the same >=/<=/=/</>
-# pkgpattern syntax as Arch's PKGBUILDs, so this suffix carries over verbatim.
+# depver <depstring> -> version-constraint suffix (e.g. ">=4.0.0"), or empty
 depver() {
   local d=$1 bare
   bare=$(strdep "$d")
@@ -86,9 +72,7 @@ optdep_name() {
   printf '%s' "${d%%:*}"
 }
 
-# pkgbuild_is_devel -- true if PB_SOURCE has a git+ entry (a VCS/-git-style
-# package), the case --devel exists to handle: pkgver may not change between
-# builds even though upstream has new commits.
+# pkgbuild_is_devel -- true if PB_SOURCE has a git+ entry (VCS package)
 pkgbuild_is_devel() {
   local s
   for s in "${PB_SOURCE[@]}"; do
@@ -97,8 +81,7 @@ pkgbuild_is_devel() {
   return 1
 }
 
-# pkgbuild_devel_latest_commit -- HEAD commit of the first git+ source's
-# remote, via a cheap `git ls-remote` (no clone needed). Empty if not devel.
+# pkgbuild_devel_latest_commit -- HEAD of the first git+ source's remote, via ls-remote
 pkgbuild_devel_latest_commit() {
   local s url real base
   for s in "${PB_SOURCE[@]}"; do

@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap installer for vur, mirroring how you'd bring up yay for the
-# first time on Arch (`git clone ... && cd yay && makepkg -si`): clone this
-# repo, then run this script.
-#
-#   git clone <this-repo-url> vur
-#   cd vur
-#   ./install.sh
+# Bootstrap installer for vur: git clone, cd vur, ./install.sh.
 set -euo pipefail
 
 SELF=$(readlink -f "${BASH_SOURCE[0]}")

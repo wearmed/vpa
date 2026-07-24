@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 # vur -- Void User Repository: an AUR helper for Void Linux.
-#
-# Fetches PKGBUILDs from the AUR, builds them with a minimal makepkg-like
-# driver, and packages the result as a real .xbps package via xbps-create so
-# it's tracked/removable through xbps like any other package.
-#
-# Trust model: identical to yay/paru/pikaur. AUR PKGBUILDs are arbitrary bash;
-# vur always shows the full PKGBUILD (and any .install scriptlet) and asks
-# for confirmation before ever sourcing freshly fetched/updated code.
 set -euo pipefail
 
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
@@ -63,20 +55,8 @@ CONFIG FILE:
 EOF
 }
 
-# review_and_load <pkgbase> <gitdir>
-# The single enforcement point for "show + confirm before ever sourcing
-# untrusted PKGBUILD content". Used for both top-level requested packages and
-# every recursively discovered AUR dependency. Diffs against the last
-# reviewed snapshot (if any) instead of re-dumping an unchanged PKGBUILD in
-# full every time, and honors --edit before the final confirmation.
-# warn_systemd_forcing_flags <pkgbuild-file>
-# Arch PKGBUILDs routinely assume systemd is available and pass build flags
-# that unconditionally require it, which then fail hard on a runit system
-# like Void instead of just skipping the systemd-only bits (the same problem
-# Artix's OpenRC/runit/s6 users hit building the same AUR packages on top of
-# Arch). Static best-effort grep, not a build-log parse, so it can warn
-# *before* wasting time on a build that's doomed to fail -- it never edits
-# the PKGBUILD itself; --edit is how you act on it.
+# warn_systemd_forcing_flags <pkgbuild-file> -- static grep for build flags
+# that unconditionally require systemd (breaks on Void/Artix-style runit).
 warn_systemd_forcing_flags() {
   local file=$1 hit
   hit=$(grep -nEo -- '--(with|enable)-systemd|-Dsystemd=(true|enabled)|-D(WITH_)?SYSTEMD(_SUPPORT)?=(ON|1)|USE_SYSTEMD=1' "$file" 2>/dev/null) || return 0
@@ -86,6 +66,7 @@ warn_systemd_forcing_flags() {
   warn "the build will likely fail unless you --edit it first and flip these to their disabled form (--without-systemd, --disable-systemd, -Dsystemd=false/disabled, -D(WITH_)SYSTEMD=OFF, etc.)"
 }
 
+# review_and_load <pkgbase> <gitdir> -- show diff/PKGBUILD, --edit, confirm, then load
 review_and_load() {
   local pkgbase=$1 dir=$2
   local inst snapshot="$REVIEWED_DIR/$pkgbase.PKGBUILD"
@@ -118,10 +99,8 @@ review_and_load() {
   pkgbuild_load "$dir"
 }
 
-# interactive_select_pkg <term> -- yay-style numbered AUR search picker.
-# Prints one or more selected package Names (one per line) to stdout, sorted
-# so the most popular result is the highest (easiest to reach) number.
-# Accepts space-separated indices and/or ranges, e.g. "1 3 5-7".
+# interactive_select_pkg <term> -- numbered AUR search picker, prints chosen
+# Name(s) to stdout. Accepts indices/ranges, e.g. "1 3 5-7".
 interactive_select_pkg() {
   local term=$1 json count
   json=$(aur_rpc_search "$term") || return 1

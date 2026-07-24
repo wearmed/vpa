@@ -1,29 +1,25 @@
 # shellcheck shell=bash
-# Shared state, logging and small helpers used by every other lib/*.sh file.
-# Expects $ROOT (the vur project directory) to already be exported by the caller.
-#
-# shellcheck disable=SC2034  # these globals are consumed by other lib/*.sh files, not this one
+# Shared state/helpers for all lib/*.sh files. Expects $ROOT exported by the caller.
+# shellcheck disable=SC2034  # used by other lib/*.sh files
 
 CACHE_DIR="${VUR_CACHE:-$HOME/.cache/vur}"
 BUILD_DIR="$CACHE_DIR/build"
 REPO_DIR="$CACHE_DIR/repo"
 MANIFEST="$CACHE_DIR/installed.db"
-REVIEWED_DIR="$CACHE_DIR/reviewed"              # used by `vur`:review_and_load (last-seen PKGBUILD per pkgbase)
+REVIEWED_DIR="$CACHE_DIR/reviewed"
 CONFIG_DIR="$HOME/.config/vur"
 CONFIG_FILE="$CONFIG_DIR/vur.conf"
-USER_DEPMAP="$CONFIG_DIR/depmap.conf"           # used by lib/deps.sh
-DEFAULT_DEPMAP="$ROOT/config/depmap.conf"       # used by lib/deps.sh
+USER_DEPMAP="$CONFIG_DIR/depmap.conf"
+DEFAULT_DEPMAP="$ROOT/config/depmap.conf"
 
-AUR_RPC="https://aur.archlinux.org/rpc/v5"      # used by lib/aur.sh
-AUR_GIT="https://aur.archlinux.org"              # used by lib/aur.sh
+AUR_RPC="https://aur.archlinux.org/rpc/v5"
+AUR_GIT="https://aur.archlinux.org"
 
 mkdir -p "$BUILD_DIR" "$REPO_DIR" "$REVIEWED_DIR" "$CONFIG_DIR"
 touch "$MANIFEST"
 
-# Config file: plain KEY=value shell, same trust level as a personal .bashrc.
-# Recognized keys: NOCONFIRM, EDITOR, CLEAN_AFTER (see install.sh's template).
-# NOCONFIRM/EDIT_PKGBUILD/DEVEL can each also be set for a single invocation
-# via the --noconfirm/-y, --edit, --devel CLI flags (parsed in `vur` itself).
+# Recognized keys: NOCONFIRM, EDITOR, CLEAN_AFTER. Overridable per-run via
+# --noconfirm/-y, --edit, --devel (parsed in `vur`).
 NOCONFIRM=${NOCONFIRM:-0}
 CLEAN_AFTER=${CLEAN_AFTER:-0}
 EDIT_PKGBUILD=${EDIT_PKGBUILD:-0}
@@ -31,11 +27,9 @@ DEVEL=${DEVEL:-0}
 # shellcheck disable=SC1090
 [[ -r "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 
-# Effective editor for `vur install --edit`: config EDITOR wins, then $VISUAL/$EDITOR, then vi.
 VUR_EDITOR=${EDITOR:-${VISUAL:-vi}}
 
-# set_colors <yes|no|auto> -- backs the --color= flag; "auto" (the default)
-# follows whether stderr is a tty, same as before this existed.
+# set_colors <yes|no|auto> -- backs --color=
 set_colors() {
   local mode=${1:-auto} use
   case "$mode" in
@@ -66,8 +60,7 @@ confirm() {
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
-# require_bin <binary> [xbps-package-name]
-# Aborts unless the binary is present, offering to install it via xbps first.
+# require_bin <binary> [xbps-package-name] -- installs it via xbps if missing
 require_bin() {
   local bin=$1 pkg=${2:-$1}
   command -v "$bin" >/dev/null 2>&1 && return 0
@@ -80,8 +73,6 @@ require_bin() {
 }
 
 # manifest_set <pkgname> <pkgver-pkgrel> [vcs-commit]
-# Third column is only populated for -git/-svn/-hg style packages tracked
-# with --devel; empty otherwise.
 manifest_set() {
   local name=$1 ver=$2 commit=${3:-}
   local tmp; tmp="$(mktemp "$MANIFEST.XXXXXX")"

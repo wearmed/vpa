@@ -1,14 +1,8 @@
 # shellcheck shell=bash
-# Fetches PKGBUILD sources, verifies checksums, extracts archives, then runs
-# prepare()/build() as the normal user and package()/package_<name>() under
-# fakeroot. Requires PB_* to already be loaded (via pkgbuild_load) for the
-# pkgbase currently being acted on.
+# Fetches sources, verifies checksums, runs build()/package(). Requires PB_*
+# already loaded via pkgbuild_load.
 #
-# Directory layout per pkgbase, all siblings so an extracted upstream tarball
-# can never collide with vur's own dirs:
-#   $BUILD_DIR/<pkgbase>/git/          -- aur_clone target (PKGBUILD, *.install, patches)
-#   $BUILD_DIR/<pkgbase>/src/          -- srcdir, recreated fresh on every build
-#   $BUILD_DIR/<pkgbase>/pkg/<name>/   -- pkgdir per pkgname (fakeroot-populated)
+# Layout: $BUILD_DIR/<pkgbase>/{git,src,pkg/<name>}
 
 _is_noextract() {
   local fname=$1 n
@@ -39,9 +33,7 @@ _check_sum() {
   [[ "$got" == "$expect" ]] || die "$file: $tool mismatch (expected $expect, got $got)"
 }
 
-# _verify_checksum <index> <fname> <dir> -- uses whichever of PB_SHA512SUMS /
-# PB_SHA256SUMS / PB_B2SUMS / PB_MD5SUMS has a non-SKIP entry at that index,
-# strongest first.
+# _verify_checksum <index> <fname> <dir> -- strongest non-SKIP sum wins
 _verify_checksum() {
   local idx=$1 fname=$2 dir=$3 val
 
@@ -133,9 +125,7 @@ fetch_sources() {
 }
 
 # run_build <pkgbase> -- runs prepare()/build() as the normal user.
-# Untrusted PKGBUILD values (pkgver etc.) cross into the driver only via the
-# execve() environment array, never as interpolated shell text, so a
-# malicious pkgname/pkgver cannot break out of quoting.
+# PKGBUILD values pass through env, never interpolated shell text.
 run_build() {
   local pkgbase=$1
   local gitdir="$BUILD_DIR/$pkgbase/git" srcdir="$BUILD_DIR/$pkgbase/src"
@@ -148,8 +138,7 @@ run_build() {
     || die "build() failed for $pkgbase"
 }
 
-# run_package <pkgbase> -- runs package()/package_<name>() under fakeroot,
-# once per pkgname (handles split-package PKGBUILDs).
+# run_package <pkgbase> -- runs package()/package_<name>() under fakeroot, per pkgname
 run_package() {
   local pkgbase=$1
   local gitdir="$BUILD_DIR/$pkgbase/git" srcdir="$BUILD_DIR/$pkgbase/src"
@@ -168,9 +157,7 @@ run_package() {
   done < <(pkgbuild_names)
 }
 
-# built_vcs_commit <pkgbase> -- HEAD commit of the first git+ source actually
-# built (if any), for --devel tracking via manifest_set's third column. Empty
-# for ordinary (non-VCS) packages.
+# built_vcs_commit <pkgbase> -- HEAD of the built git+ source, for --devel. Empty if not VCS.
 built_vcs_commit() {
   local pkgbase=$1
   local srcdir="$BUILD_DIR/$pkgbase/src" s url fname

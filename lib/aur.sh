@@ -1,10 +1,8 @@
 
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # c_bold/c_reset etc. come from lib/common.sh, sourced alongside this file by `vur`
-# Talks to the AUR RPC (https://aur.archlinux.org/rpc/v5) and clones AUR git repos.
+# shellcheck disable=SC2154  # c_bold/c_reset come from lib/common.sh
+# AUR RPC (https://aur.archlinux.org/rpc/v5) + git clone helpers.
 
-# --retry smooths over the transient TLS/connection blips the AUR RPC
-# occasionally throws (seen in practice, not hypothetical).
 _AUR_CURL_OPTS=(--retry 3 --retry-delay 1 --retry-connrefused --connect-timeout 15)
 
 aur_rpc_search() {

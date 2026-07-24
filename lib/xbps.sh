@@ -1,8 +1,6 @@
 # shellcheck shell=bash
-# Wraps xbps-create/xbps-rindex/xbps-install so a built pkgdir becomes a real,
-# xbps-tracked package. Never touches /etc/xbps.d/ -- the local build repo is
-# passed via --repository on every call instead, so vur leaves zero system
-# config residue and can be uninstalled by just deleting its directories.
+# xbps-create/xbps-rindex/xbps-install wrappers. Uses --repository="$REPO_DIR"
+# instead of touching /etc/xbps.d/, so vur leaves no system config behind.
 
 # create_xbps_pkg <pkgname> <pkgver> <pkgrel> <pkgdir> <deps> <desc> <url> <license>
 create_xbps_pkg() {
