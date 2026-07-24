@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2154  # c_bold/c_reset etc. come from lib/common.sh, sourced alongside this file by `vur`
 # Talks to the AUR RPC (https://aur.archlinux.org/rpc/v5) and clones AUR git repos.
 
 aur_rpc_search() {

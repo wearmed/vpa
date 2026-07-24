@@ -1,16 +1,18 @@
 # shellcheck shell=bash
 # Shared state, logging and small helpers used by every other lib/*.sh file.
 # Expects $ROOT (the vur project directory) to already be exported by the caller.
+#
+# shellcheck disable=SC2034  # these globals are consumed by other lib/*.sh files, not this one
 
 CACHE_DIR="${VUR_CACHE:-$HOME/.cache/vur}"
 BUILD_DIR="$CACHE_DIR/build"
 REPO_DIR="$CACHE_DIR/repo"
 MANIFEST="$CACHE_DIR/installed.db"
-USER_DEPMAP="$HOME/.config/vur/depmap.conf"
-DEFAULT_DEPMAP="$ROOT/config/depmap.conf"
+USER_DEPMAP="$HOME/.config/vur/depmap.conf"     # used by lib/deps.sh
+DEFAULT_DEPMAP="$ROOT/config/depmap.conf"       # used by lib/deps.sh
 
-AUR_RPC="https://aur.archlinux.org/rpc/v5"
-AUR_GIT="https://aur.archlinux.org"
+AUR_RPC="https://aur.archlinux.org/rpc/v5"      # used by lib/aur.sh
+AUR_GIT="https://aur.archlinux.org"              # used by lib/aur.sh
 
 mkdir -p "$BUILD_DIR" "$REPO_DIR" "$(dirname "$MANIFEST")"
 touch "$MANIFEST"
@@ -18,7 +20,7 @@ touch "$MANIFEST"
 if [[ -t 2 ]]; then
   c_red=$'\e[31m'; c_green=$'\e[32m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'; c_bold=$'\e[1m'; c_reset=$'\e[0m'
 else
-  c_red=; c_green=; c_yellow=; c_blue=; c_bold=; c_reset=
+  c_red=; c_green=; c_yellow=; c_blue=; c_bold=; c_reset=  # c_bold used by lib/aur.sh
 fi
 
 info() { printf '%s::%s %s\n' "$c_blue" "$c_reset" "$*" >&2; }

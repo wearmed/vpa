@@ -22,6 +22,7 @@ pkgbuild_load() {
     cd "$dir" || exit 1
     # PKGBUILDs may call build()/package()/prepare() at parse time only if
     # they misbehave; we don't invoke them ourselves here.
+    # shellcheck disable=SC1091  # PKGBUILD is fetched at runtime; nothing to statically follow
     source ./PKGBUILD
     for v in "${_pb_vars[@]}"; do
       declare -p "$v" 2>/dev/null || true
