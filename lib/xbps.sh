@@ -8,12 +8,23 @@
 create_xbps_pkg() {
   local pkgname=$1 pkgver=$2 pkgrel=$3 pkgdir=$4 deps=$5 desc=$6 url=$7 license=$8
   require_bin xbps-create xbps
+
+  [[ -n "$pkgname" ]] || die "create_xbps_pkg: empty pkgname (broken PKGBUILD?)"
+  [[ -n "$pkgver" ]] || die "$pkgname: empty pkgver -- likely a -git/-svn/-hg PKGBUILD whose pkgver() vur doesn't invoke (see README limitations); set pkgver= manually with --edit"
+  [[ -d "$pkgdir" ]] || die "$pkgname: pkgdir $pkgdir doesn't exist -- package() didn't run"
+  if [[ -z "$(find "$pkgdir" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+    die "$pkgname: package() produced an empty directory -- nothing to package. Check the PKGBUILD's package() function (--edit to inspect it)"
+  fi
+
   local arch; arch=$(void_arch)
   local args=(-A "$arch" -n "${pkgname}-${pkgver}_${pkgrel}" -s "${desc:-$pkgname}")
   [[ -n "$deps" ]]    && args+=(-D "$deps")
   [[ -n "$url" ]]     && args+=(-H "$url")
   [[ -n "$license" ]] && args+=(-l "$license")
   ( cd "$REPO_DIR" && xbps-create "${args[@]}" "$pkgdir" ) || die "xbps-create failed for $pkgname"
+
+  local outfile="$REPO_DIR/${pkgname}-${pkgver}_${pkgrel}.${arch}.xbps"
+  [[ -f "$outfile" ]] || die "xbps-create reported success for $pkgname but $outfile is missing"
   ok "built ${pkgname}-${pkgver}_${pkgrel}.${arch}.xbps"
 }
 

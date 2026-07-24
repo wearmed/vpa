@@ -1,10 +1,15 @@
+
 # shellcheck shell=bash
 # shellcheck disable=SC2154  # c_bold/c_reset etc. come from lib/common.sh, sourced alongside this file by `vur`
 # Talks to the AUR RPC (https://aur.archlinux.org/rpc/v5) and clones AUR git repos.
 
+# --retry smooths over the transient TLS/connection blips the AUR RPC
+# occasionally throws (seen in practice, not hypothetical).
+_AUR_CURL_OPTS=(--retry 3 --retry-delay 1 --retry-connrefused --connect-timeout 15)
+
 aur_rpc_search() {
   local term=$1
-  curl -fsSL --get \
+  curl -fsSL "${_AUR_CURL_OPTS[@]}" --get \
     --data-urlencode "arg=$term" \
     --data-urlencode "by=name-desc" \
     "$AUR_RPC/search"
@@ -14,7 +19,7 @@ aur_rpc_search() {
 aur_rpc_info() {
   local args=() n
   for n in "$@"; do args+=(--data-urlencode "arg[]=$n"); done
-  curl -fsSL --get "${args[@]}" "$AUR_RPC/info"
+  curl -fsSL "${_AUR_CURL_OPTS[@]}" --get "${args[@]}" "$AUR_RPC/info"
 }
 
 # aur_pkgbase <name> -> prints PackageBase for a given AUR package name, or empty if not found.
@@ -29,12 +34,13 @@ aur_clone() {
   local pkgbase=$1 dest=$2
   if [[ -d "$dest/.git" ]]; then
     info "updating existing checkout of $pkgbase"
-    git -C "$dest" fetch --quiet origin
-    git -C "$dest" reset --hard --quiet origin/HEAD
+    git -C "$dest" fetch --quiet origin || die "git fetch failed for $pkgbase (network issue, or the AUR repo disappeared)"
+    git -C "$dest" reset --hard --quiet origin/HEAD || die "git reset failed for $pkgbase"
   else
     rm -rf "$dest"
-    git clone --quiet "$AUR_GIT/$pkgbase.git" "$dest"
+    git clone --quiet "$AUR_GIT/$pkgbase.git" "$dest" || die "git clone failed for $pkgbase -- check the name and your network connection"
   fi
+  [[ -f "$dest/PKGBUILD" ]] || die "$pkgbase: cloned repo has no PKGBUILD -- is '$pkgbase' really an AUR package base?"
 }
 
 cmd_search() {

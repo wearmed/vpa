@@ -69,6 +69,23 @@ EOF
 # every recursively discovered AUR dependency. Diffs against the last
 # reviewed snapshot (if any) instead of re-dumping an unchanged PKGBUILD in
 # full every time, and honors --edit before the final confirmation.
+# warn_systemd_forcing_flags <pkgbuild-file>
+# Arch PKGBUILDs routinely assume systemd is available and pass build flags
+# that unconditionally require it, which then fail hard on a runit system
+# like Void instead of just skipping the systemd-only bits (the same problem
+# Artix's OpenRC/runit/s6 users hit building the same AUR packages on top of
+# Arch). Static best-effort grep, not a build-log parse, so it can warn
+# *before* wasting time on a build that's doomed to fail -- it never edits
+# the PKGBUILD itself; --edit is how you act on it.
+warn_systemd_forcing_flags() {
+  local file=$1 hit
+  hit=$(grep -nEo -- '--(with|enable)-systemd|-Dsystemd=(true|enabled)|-D(WITH_)?SYSTEMD(_SUPPORT)?=(ON|1)|USE_SYSTEMD=1' "$file" 2>/dev/null) || return 0
+  [[ -n "$hit" ]] || return 0
+  warn "this PKGBUILD unconditionally requests systemd support, which doesn't exist on Void (runit):"
+  printf '%s\n' "$hit" | sed 's/^/    /' >&2
+  warn "the build will likely fail unless you --edit it first and flip these to their disabled form (--without-systemd, --disable-systemd, -Dsystemd=false/disabled, -D(WITH_)SYSTEMD=OFF, etc.)"
+}
+
 review_and_load() {
   local pkgbase=$1 dir=$2
   local inst snapshot="$REVIEWED_DIR/$pkgbase.PKGBUILD"
@@ -89,6 +106,8 @@ review_and_load() {
     cat "$inst"
   done
   shopt -u nullglob
+
+  warn_systemd_forcing_flags "$dir/PKGBUILD"
 
   if [[ "$EDIT_PKGBUILD" == "1" ]]; then
     confirm "Open PKGBUILD for $pkgbase in $VUR_EDITOR before building?" && "$VUR_EDITOR" "$dir/PKGBUILD"
