@@ -51,6 +51,12 @@
     "Artix",
     "eudev",
     "Dsystemd",
-    "vpm"
+    "vpm",
+    "curver",
+    "curvers",
+    "curcommit",
+    "curcommits",
+    "multiinfo",
+    "pkgs"
   ]
 }

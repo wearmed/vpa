@@ -150,9 +150,11 @@ cmd_install() {
   require_bin xbps-create xbps
 
   resolve_deps_init
-  local name base bases=() picked pname
+  local name base bases=() picked pname json
+  # One batched multiinfo request for all directly-named packages instead of one per name.
+  json=$(aur_rpc_info "${pkgs[@]}") || die "AUR lookup failed"
   for name in "${pkgs[@]}"; do
-    base=$(aur_pkgbase "$name") || true
+    base=$(jq -r --arg n "$name" '.results[] | select(.Name == $n) | .PackageBase' <<<"$json")
     if [[ -n "$base" ]]; then
       bases+=("$base")
     else
@@ -232,11 +234,23 @@ cmd_upgrade() {
   fi
   require_bin jq jq
 
-  local outdated=() name curver curcommit json remote base dir latest
+  local names=() curvers=() curcommits=() name curver curcommit
   while IFS=$'\t' read -r name curver curcommit; do
     [[ -n "$name" ]] || continue
-    json=$(aur_rpc_info "$name") || { warn "AUR lookup failed for $name"; continue; }
-    remote=$(jq -r '.results[0].Version // empty' <<<"$json")
+    names+=("$name") curvers+=("$curver") curcommits+=("$curcommit")
+  done < "$MANIFEST"
+  if [[ ${#names[@]} -eq 0 ]]; then
+    info "nothing tracked by vur yet"
+    return 0
+  fi
+
+  # One batched multiinfo request for every tracked package instead of one per name.
+  local json; json=$(aur_rpc_info "${names[@]}") || die "AUR lookup failed"
+
+  local outdated=() i base dir latest remote
+  for i in "${!names[@]}"; do
+    name=${names[$i]} curver=${curvers[$i]} curcommit=${curcommits[$i]}
+    remote=$(jq -r --arg n "$name" '.results[] | select(.Name == $n) | .Version' <<<"$json")
     if [[ -z "$remote" ]]; then
       warn "'$name' no longer found on AUR"
       continue
@@ -247,7 +261,8 @@ cmd_upgrade() {
       continue
     fi
     if [[ "$DEVEL" == "1" && -n "$curcommit" ]]; then
-      base=$(aur_pkgbase "$name") || continue
+      base=$(jq -r --arg n "$name" '.results[] | select(.Name == $n) | .PackageBase' <<<"$json")
+      [[ -n "$base" ]] || continue
       dir="$BUILD_DIR/$base/git"
       aur_clone "$base" "$dir" >/dev/null
       pkgbuild_load "$dir"
@@ -257,7 +272,7 @@ cmd_upgrade() {
         outdated+=("$name")
       fi
     fi
-  done < "$MANIFEST"
+  done
 
   if [[ ${#outdated[@]} -eq 0 ]]; then
     ok "everything up to date"

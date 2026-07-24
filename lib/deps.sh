@@ -2,49 +2,70 @@
 # Dependency classification/resolution: Void xbps repos first, AUR fallback,
 # config/depmap.conf bridges Arch/Void package-name drift.
 
+# Parsed once into memory instead of grepping the depmap files on every
+# lookup; DEFAULT_DEPMAP loaded first so USER_DEPMAP entries win, matching
+# the previous "check user file first" behavior. Last line for a given name
+# wins within either file.
+declare -gA _DEPMAP
+_DEPMAP_LOADED=0
+_depmap_load() {
+  [[ "$_DEPMAP_LOADED" == 1 ]] && return 0
+  local f line name
+  for f in "$DEFAULT_DEPMAP" "$USER_DEPMAP"; do
+    [[ -r "$f" ]] || continue
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      name=${line%%=*}
+      _DEPMAP[$name]=${line#*=}
+    done < "$f"
+  done
+  _DEPMAP_LOADED=1
+}
+
 # depmap_lookup <archname> -> mapped name, original if unmapped, "-" if no equivalent
 depmap_lookup() {
-  local name=$1 f line
-  for f in "$USER_DEPMAP" "$DEFAULT_DEPMAP"; do
-    [[ -r "$f" ]] || continue
-    line=$(grep -E "^${name}=" "$f" 2>/dev/null | tail -n1) || true
-    if [[ -n "$line" ]]; then
-      printf '%s\n' "${line#*=}"
-      return 0
-    fi
-  done
-  printf '%s\n' "$name"
+  local name=$1
+  _depmap_load
+  printf '%s\n' "${_DEPMAP[$name]:-$name}"
 }
 
 # dep_classify <archdepstring> -- sets DEP_CLASS (installed|available|aur|unresolved),
-# DEP_RESOLVED_NAME, DEP_REASON, DEP_AUR_BASE
+# DEP_RESOLVED_NAME, DEP_REASON, DEP_AUR_BASE. Memoized per raw depstring:
+# the same dep is classified twice per pkgbase (resolve_pkgbase, then
+# runtime_deps_string), and repeats across pkgbases in the same run.
+declare -gA _DEP_CACHE
 dep_classify() {
-  local raw=$1 bare mapped
+  local raw=$1
+  if [[ -n "${_DEP_CACHE[$raw]:-}" ]]; then
+    IFS=$'\t' read -r DEP_CLASS DEP_RESOLVED_NAME DEP_REASON DEP_AUR_BASE <<<"${_DEP_CACHE[$raw]}"
+    return 0
+  fi
+
+  local bare mapped
   bare=$(strdep "$raw")
   mapped=$(depmap_lookup "$bare")
   DEP_AUR_BASE=
+  DEP_REASON=
 
   if [[ "$mapped" == "-" ]]; then
     DEP_CLASS=unresolved DEP_RESOLVED_NAME=$bare
     DEP_REASON="no Void equivalent (per depmap.conf)"
-    return 0
-  fi
-  if xbps-query "$mapped" >/dev/null 2>&1; then
+  elif xbps-query "$mapped" >/dev/null 2>&1; then
     DEP_CLASS=installed DEP_RESOLVED_NAME=$mapped
-    return 0
-  fi
-  if xbps-query -R --repository="$REPO_DIR" "$mapped" >/dev/null 2>&1; then
+  elif xbps-query -R --repository="$REPO_DIR" "$mapped" >/dev/null 2>&1; then
     DEP_CLASS=available DEP_RESOLVED_NAME=$mapped
-    return 0
+  else
+    local base
+    base=$(aur_pkgbase "$bare" 2>/dev/null) || base=
+    if [[ -n "$base" ]]; then
+      DEP_CLASS=aur DEP_RESOLVED_NAME=$bare DEP_AUR_BASE=$base
+    else
+      DEP_CLASS=unresolved DEP_RESOLVED_NAME=$bare
+      DEP_REASON="not installed, not in Void repos, not found in AUR"
+    fi
   fi
-  local base
-  base=$(aur_pkgbase "$bare" 2>/dev/null) || base=
-  if [[ -n "$base" ]]; then
-    DEP_CLASS=aur DEP_RESOLVED_NAME=$bare DEP_AUR_BASE=$base
-    return 0
-  fi
-  DEP_CLASS=unresolved DEP_RESOLVED_NAME=$bare
-  DEP_REASON="not installed, not in Void repos, not found in AUR"
+
+  _DEP_CACHE[$raw]="$DEP_CLASS	$DEP_RESOLVED_NAME	$DEP_REASON	$DEP_AUR_BASE"
 }
 
 # resolve_deps_init -- (re)initializes the build-plan globals

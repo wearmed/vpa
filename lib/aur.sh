@@ -32,9 +32,12 @@ aur_clone() {
   local pkgbase=$1 dest=$2
   if [[ -d "$dest/.git" ]]; then
     info "updating existing checkout of $pkgbase"
-    git -C "$dest" fetch --quiet origin || die "git fetch failed for $pkgbase (network issue, or the AUR repo disappeared)"
-    git -C "$dest" reset --hard --quiet origin/HEAD || die "git reset failed for $pkgbase"
-  else
+    if ! git -C "$dest" fetch --quiet origin || ! git -C "$dest" reset --hard --quiet origin/HEAD; then
+      warn "existing checkout of $pkgbase looks broken -- re-cloning fresh"
+      rm -rf "$dest"
+    fi
+  fi
+  if [[ ! -d "$dest/.git" ]]; then
     rm -rf "$dest"
     git clone --quiet "$AUR_GIT/$pkgbase.git" "$dest" || die "git clone failed for $pkgbase -- check the name and your network connection"
   fi
