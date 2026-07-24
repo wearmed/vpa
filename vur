@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# vur -- Void User Repository: an AUR helper for Void Linux.
+#
+# Fetches PKGBUILDs from the AUR, builds them with a minimal makepkg-like
+# driver, and packages the result as a real .xbps package via xbps-create so
+# it's tracked/removable through xbps like any other package.
+#
+# Trust model: identical to yay/paru/pikaur. AUR PKGBUILDs are arbitrary bash;
+# vur always shows the full PKGBUILD (and any .install scriptlet) and asks
+# for confirmation before ever sourcing freshly fetched/updated code.
+set -euo pipefail
+
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+ROOT=$(cd "$(dirname "$SELF")" && pwd)
+export ROOT
+
+source "$ROOT/lib/common.sh"
+source "$ROOT/lib/aur.sh"
+source "$ROOT/lib/pkgbuild.sh"
+source "$ROOT/lib/deps.sh"
+source "$ROOT/lib/build.sh"
+source "$ROOT/lib/xbps.sh"
+
+usage() {
+  cat <<'EOF'
+usage: vur <command> [args...]
+
+commands:
+  search <term>          search the AUR
+  info <pkg>              show AUR package details
+  install <pkg> [pkg...]  build and install package(s) from the AUR
+  remove <pkg> [pkg...]   remove installed package(s) (via xbps-remove)
+  upgrade                 rebuild any vur-tracked package with a newer AUR version
+  list                    list packages vur has installed
+  help                    show this message
+EOF
+}
+
+# review_and_load <pkgbase> <gitdir>
+# The single enforcement point for "show + confirm before ever sourcing
+# untrusted PKGBUILD content". Used for both top-level requested packages and
+# every recursively discovered AUR dependency.
+review_and_load() {
+  local pkgbase=$1 dir=$2 inst
+  info "PKGBUILD for $pkgbase:"
+  if [[ -n "${PAGER:-}" ]]; then
+    "$PAGER" -- "$dir/PKGBUILD" || cat "$dir/PKGBUILD"
+  else
+    cat "$dir/PKGBUILD"
+  fi
+  shopt -s nullglob
+  for inst in "$dir"/*.install; do
+    info "install scriptlet: $(basename "$inst")"
+    cat "$inst"
+  done
+  shopt -u nullglob
+  confirm "Build and install '$pkgbase' using the PKGBUILD shown above?" || die "aborted by user for $pkgbase"
+  pkgbuild_load "$dir"
+}
+
+cmd_install() {
+  local pkgs=("$@")
+  [[ ${#pkgs[@]} -gt 0 ]] || die "usage: vur install <pkg> [pkg...]"
+  require_bin jq jq
+  require_bin curl curl
+  require_bin git git
+  require_bin fakeroot fakeroot
+  require_bin xbps-create xbps
+
+  resolve_deps_init
+  local name base dir
+  for name in "${pkgs[@]}"; do
+    base=$(aur_pkgbase "$name") || true
+    [[ -n "$base" ]] || die "'$name' not found in AUR"
+    dir="$BUILD_DIR/$base/git"
+    aur_clone "$base" "$dir"
+    resolve_pkgbase "$base" "$dir"
+  done
+
+  if [[ ${#PLAN_UNRESOLVED[@]} -gt 0 ]]; then
+    warn "unresolved dependencies:"
+    printf '  - %s\n' "${PLAN_UNRESOLVED[@]}" >&2
+    confirm "Continue anyway?" || die "aborted due to unresolved dependencies"
+  fi
+  info "build order: ${PLAN_ORDER[*]}"
+
+  local built_pkgnames=() pb
+  for pb in "${PLAN_ORDER[@]}"; do
+    pkgbuild_load "$BUILD_DIR/$pb/git"
+    fetch_sources "$pb"
+    run_build "$pb"
+    run_package "$pb"
+    local deps_str n
+    deps_str=$(runtime_deps_string)
+    while IFS= read -r n; do
+      create_xbps_pkg "$n" "$PB_PKGVER" "$PB_PKGREL" \
+        "$BUILD_DIR/$pb/pkg/$n" "$deps_str" "$PB_PKGDESC" "$PB_URL" "${PB_LICENSE[*]:-}"
+      built_pkgnames+=("$n")
+    done < <(pkgbuild_names)
+  done
+
+  index_repo
+  install_from_local "${built_pkgnames[@]}"
+
+  for pb in "${PLAN_ORDER[@]}"; do
+    pkgbuild_load "$BUILD_DIR/$pb/git"
+    local n
+    while IFS= read -r n; do
+      manifest_set "$n" "${PB_PKGVER}-${PB_PKGREL}"
+    done < <(pkgbuild_names)
+  done
+  ok "installed: ${built_pkgnames[*]}"
+}
+
+cmd_remove() {
+  local pkgs=("$@")
+  [[ ${#pkgs[@]} -gt 0 ]] || die "usage: vur remove <pkg> [pkg...]"
+  sudo xbps-remove -y "${pkgs[@]}" || die "xbps-remove failed"
+  local p
+  for p in "${pkgs[@]}"; do manifest_remove "$p"; done
+  ok "removed: ${pkgs[*]}"
+}
+
+cmd_upgrade() {
+  [[ -s "$MANIFEST" ]] || { info "nothing tracked by vur yet"; return 0; }
+  require_bin jq jq
+  local outdated=() name curver json remote
+  while IFS=$'\t' read -r name curver; do
+    [[ -n "$name" ]] || continue
+    json=$(aur_rpc_info "$name") || { warn "AUR lookup failed for $name"; continue; }
+    remote=$(jq -r '.results[0].Version // empty' <<<"$json")
+    [[ -n "$remote" ]] || { warn "'$name' no longer found on AUR"; continue; }
+    if [[ "$remote" != "$curver" ]]; then
+      info "$name: $curver -> $remote"
+      outdated+=("$name")
+    fi
+  done < "$MANIFEST"
+  if [[ ${#outdated[@]} -eq 0 ]]; then
+    ok "everything up to date"
+    return 0
+  fi
+  confirm "Rebuild ${#outdated[@]} package(s): ${outdated[*]}?" || die "aborted"
+  cmd_install "${outdated[@]}"
+}
+
+cmd_list() {
+  if [[ ! -s "$MANIFEST" ]]; then
+    info "nothing tracked by vur"
+    return 0
+  fi
+  awk -F'\t' '{printf "%-30s %s\n", $1, $2}' "$MANIFEST"
+}
+
+cmd=${1:-}
+[[ $# -gt 0 ]] && shift
+
+case "$cmd" in
+  search)  cmd_search "$@" ;;
+  info)    cmd_info "$@" ;;
+  install) cmd_install "$@" ;;
+  remove)  cmd_remove "$@" ;;
+  upgrade) cmd_upgrade "$@" ;;
+  list)    cmd_list "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command '$cmd' (try: vur help)" ;;
+esac
