@@ -28,28 +28,38 @@ source "$ROOT/lib/build.sh"
 source "$ROOT/lib/xbps.sh"
 
 usage() {
-  cat <<'EOF'
-usage: vur [flags] <command> [args...]
+  cat <<EOF
+vur - AUR helper for Void Linux
+XBPS version: $(xbps-query -V 2>/dev/null || echo unknown)
 
-commands:
-  search <term>           search the AUR
-  info <pkg>               show AUR package details
-  install <pkg> [pkg...]   build and install package(s) from the AUR
-                           (a name with no exact match opens an interactive
-                           numbered picker over the search results, yay-style)
-  remove <pkg> [pkg...]    remove installed package(s) (via xbps-remove)
-  upgrade                  offer a full system upgrade, then rebuild any
-                           vur-tracked package with a newer AUR version
-  clean                    wipe the build cache and local package repo
-  list                     list packages vur has installed
+USAGE:
+vur [OPTIONS] [SUBCOMMANDS] [<ARGS>]
 
-flags (may appear anywhere, before or after the command):
-  --noconfirm, -y   never prompt for confirmation
-  --edit            open each PKGBUILD in $EDITOR before building
-  --devel           on upgrade, also rebuild -git/-svn/-hg packages whose
-                     upstream commit moved even if pkgver didn't change
+OPTIONS:
+--color=<yes|no|auto>        - Enable/disable colorized output (default: auto)
+--noconfirm, -y               - Never prompt for confirmation
+--edit                         - Open each PKGBUILD in \$EDITOR before building
+--devel                        - Also rebuild -git/-svn/-hg packages on
+                                  upgrade if upstream moved past pkgver
+--help                         - (same as: help)
 
-config file: ~/.config/vur/vur.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
+SUBCOMMANDS:
+search (s) <term>             - Search the AUR
+info <pkg>                     - Show information about <package>
+install (i) <pkg(s)>           - Build and install <package(s)> from the AUR
+                                  (no exact match opens an interactive
+                                  numbered picker over the search results)
+remove (rm) <pkg(s)>            - Remove <package(s)> (via xbps-remove)
+upgrade (up)                   - Offer a full system upgrade, then rebuild
+                                  any vur-tracked package with a newer
+                                  AUR version
+clean (cl)                     - Wipe the build cache and local package repo
+list (ls)                      - List packages vur has installed
+help                            - Show usage information
+helppager (hp)                 - Show usage information (piped to \$PAGER)
+
+CONFIG FILE:
+~/.config/vur/vur.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
 EOF
 }
 
@@ -285,6 +295,8 @@ for a in "$@"; do
     --noconfirm|-y) NOCONFIRM=1 ;;
     --edit) EDIT_PKGBUILD=1 ;;
     --devel) DEVEL=1 ;;
+    --color=*) set_colors "${a#*=}" ;;
+    --help) usage; exit 0 ;;
     *) ARGS+=("$a") ;;
   esac
 done
@@ -294,13 +306,14 @@ cmd=${1:-}
 [[ $# -gt 0 ]] && shift
 
 case "$cmd" in
-  search)  cmd_search "$@" ;;
-  info)    cmd_info "$@" ;;
-  install) cmd_install "$@" ;;
-  remove)  cmd_remove "$@" ;;
-  upgrade) cmd_upgrade "$@" ;;
-  clean)   cmd_clean "$@" ;;
-  list)    cmd_list "$@" ;;
-  ""|-h|--help|help) usage ;;
+  search|s)     cmd_search "$@" ;;
+  info)         cmd_info "$@" ;;
+  install|i)    cmd_install "$@" ;;
+  remove|rm)    cmd_remove "$@" ;;
+  upgrade|up)   cmd_upgrade "$@" ;;
+  clean|cl)     cmd_clean "$@" ;;
+  list|ls)      cmd_list "$@" ;;
+  ""|-h|help)   usage ;;
+  helppager|hp) usage | "${PAGER:-less}" ;;
   *) die "unknown command '$cmd' (try: vur help)" ;;
 esac

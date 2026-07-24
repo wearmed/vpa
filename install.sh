@@ -22,7 +22,7 @@ BIN_DIR="${VUR_BIN_DIR:-$HOME/.local/bin}"
 
 [[ -x "$ROOT/vur" && -d "$ROOT/lib" ]] || die "run this from inside a cloned vur checkout (missing ./vur or ./lib)"
 
-if [[ -r /etc/os-release ]] && ! grep -q '^ID=void' /etc/os-release; then
+if [[ -r /etc/os-release ]] && ! grep -Eq '^ID="?void"?$' /etc/os-release; then
   warn "this doesn't look like Void Linux -- vur relies on xbps and won't work anywhere else"
   read -r -p "continue anyway? [y/N] " reply
   [[ "$reply" =~ ^[Yy]$ ]] || exit 1

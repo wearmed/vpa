@@ -34,11 +34,22 @@ DEVEL=${DEVEL:-0}
 # Effective editor for `vur install --edit`: config EDITOR wins, then $VISUAL/$EDITOR, then vi.
 VUR_EDITOR=${EDITOR:-${VISUAL:-vi}}
 
-if [[ -t 2 ]]; then
-  c_red=$'\e[31m'; c_green=$'\e[32m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'; c_bold=$'\e[1m'; c_reset=$'\e[0m'
-else
-  c_red=; c_green=; c_yellow=; c_blue=; c_bold=; c_reset=  # c_bold used by lib/aur.sh
-fi
+# set_colors <yes|no|auto> -- backs the --color= flag; "auto" (the default)
+# follows whether stderr is a tty, same as before this existed.
+set_colors() {
+  local mode=${1:-auto} use
+  case "$mode" in
+    yes) use=1 ;;
+    no)  use=0 ;;
+    auto|*) [[ -t 2 ]] && use=1 || use=0 ;;
+  esac
+  if [[ "$use" == "1" ]]; then
+    c_red=$'\e[31m'; c_green=$'\e[32m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'; c_bold=$'\e[1m'; c_reset=$'\e[0m'
+  else
+    c_red=; c_green=; c_yellow=; c_blue=; c_bold=; c_reset=  # c_bold used by lib/aur.sh
+  fi
+}
+set_colors auto
 
 info() { printf '%s::%s %s\n' "$c_blue" "$c_reset" "$*" >&2; }
 ok()   { printf '%s::%s %s\n' "$c_green" "$c_reset" "$*" >&2; }

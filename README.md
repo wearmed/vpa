@@ -26,24 +26,31 @@ missing, symlinks `vur` into `~/.local/bin` (or `/usr/local/bin` with
 
 ## Usage
 
+Command structure follows [`vpm`](https://github.com/netzverweigerer/vpm)'s
+xbps-frontend convention: `vur [OPTIONS] [SUBCOMMAND] [<ARGS>]`, with a short
+alias next to each subcommand.
+
 ```
-vur [flags] search <term>          search the AUR
-vur [flags] info <pkg>             show AUR package details
-vur [flags] install <pkg> [pkg..]  build and install package(s) from the AUR
-vur [flags] remove <pkg> [pkg..]   remove installed package(s) (via xbps-remove)
-vur [flags] upgrade                offer a full system upgrade, then rebuild any
+vur search  (s)  <term>            search the AUR
+vur info         <pkg>             show AUR package details
+vur install (i)  <pkg> [pkg..]     build and install package(s) from the AUR
+vur remove  (rm) <pkg> [pkg..]     remove installed package(s) (via xbps-remove)
+vur upgrade (up)                   offer a full system upgrade, then rebuild any
                                     vur-tracked package with a newer AUR version
-vur [flags] clean                  wipe the build cache and local package repo
-vur [flags] list                   list packages vur has installed
+vur clean   (cl)                   wipe the build cache and local package repo
+vur list    (ls)                   list packages vur has installed
+vur help / helppager (hp)          show usage (helppager pipes it to $PAGER)
 ```
 
-Flags (may appear anywhere in the command line):
+OPTIONS (may appear anywhere in the command line, before or after the subcommand):
 
-| Flag                | Effect                                                                 |
-|----------------------|------------------------------------------------------------------------|
-| `--noconfirm`, `-y`  | never prompt for confirmation (for scripting)                          |
-| `--edit`             | open each PKGBUILD in `$EDITOR` before building                        |
-| `--devel`            | on `upgrade`, also rebuild `-git`/`-svn`/`-hg` packages whose upstream commit moved even if `pkgver` didn't change |
+| Flag                  | Effect                                                                 |
+|------------------------|------------------------------------------------------------------------|
+| `--color=<yes\|no\|auto>` | force-enable/disable colorized output (default: `auto`, follows tty) |
+| `--noconfirm`, `-y`    | never prompt for confirmation (for scripting)                          |
+| `--edit`               | open each PKGBUILD in `$EDITOR` before building                        |
+| `--devel`              | on `upgrade`, also rebuild `-git`/`-svn`/`-hg` packages whose upstream commit moved even if `pkgver` didn't change |
+| `--help`               | same as the `help` subcommand                                           |
 
 Persistent versions of the same knobs live in `~/.config/vur/vur.conf`
 (`NOCONFIRM=1`, `EDITOR=nvim`, `CLEAN_AFTER=1` to drop each package's build
@@ -57,13 +64,13 @@ so the most popular result gets the easiest-to-reach (highest) number.
 Example:
 
 ```sh
-vur search pipes
+vur s pipes
 vur info pipes.sh
-vur install pipes.sh
-vur install --noconfirm --edit somefuzzyterm   # interactive picker + PKGBUILD editing
-vur upgrade --devel
-vur list
-vur remove pipes.sh
+vur i pipes.sh
+vur i -y --edit somefuzzyterm   # interactive picker + PKGBUILD editing
+vur up --devel
+vur ls
+vur rm pipes.sh
 ```
 
 ## How it works
