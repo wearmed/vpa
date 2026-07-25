@@ -1,6 +1,6 @@
 # vur
 
-**V**oid **U**ser **R**epository — an AUR helper for Void Linux.
+**V**oid **U**ser **R**epository: an AUR helper for Void Linux.
 
 Fetches PKGBUILDs from the [AUR](https://aur.archlinux.org), builds them, and
 packages the result as a real `.xbps` via `xbps-create` — tracked and cleanly
