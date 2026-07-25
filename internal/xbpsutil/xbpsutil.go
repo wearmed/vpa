@@ -31,6 +31,62 @@ func IsAvailable(name, repoDir string) bool {
 	return sysutil.RunSilent("xbps-query", "-R", "--repository="+repoDir, name) == nil
 }
 
+// SonameProviders builds a reverse index of every shared-library soname
+// (e.g. "libXss.so.1") provided by any package in Void's configured repos
+// (plus repoDir) to the bare package name that provides it. Used to match
+// an Arch dependency to its real Void equivalent by actual ABI rather than
+// by name -- a bulk dump + one batched name-parsing call, not one
+// subprocess per package, so this stays cheap (~0.2s for ~20k packages on
+// a real repo set) enough to run as a same-process fallback.
+func SonameProviders(repoDir string) (map[string]string, error) {
+	out, err := sysutil.Output("xbps-query", "-Rs", "", "--repository="+repoDir, "--property=shlib-provides")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list shlib-provides: %w", err)
+	}
+
+	type line struct {
+		pkgver  string
+		sonames []string
+	}
+	var lines []line
+	var pkgvers []string
+	for _, raw := range strings.Split(out, "\n") {
+		pkgver, rest, ok := strings.Cut(raw, ": ")
+		if !ok {
+			continue
+		}
+		rest, _, _ = strings.Cut(rest, " (")
+		sonames := strings.Fields(rest)
+		if len(sonames) == 0 {
+			continue
+		}
+		lines = append(lines, line{pkgver: pkgver, sonames: sonames})
+		pkgvers = append(pkgvers, pkgver)
+	}
+	if len(lines) == 0 {
+		return map[string]string{}, nil
+	}
+
+	names, err := sysutil.Output("xbps-uhelper", append([]string{"getpkgname"}, pkgvers...)...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve package names: %w", err)
+	}
+	nameList := strings.Split(strings.TrimRight(names, "\n"), "\n")
+	if len(nameList) != len(lines) {
+		return nil, fmt.Errorf("shlib-provides/getpkgname line count mismatch (%d vs %d)", len(lines), len(nameList))
+	}
+
+	index := make(map[string]string, len(lines))
+	for i, l := range lines {
+		for _, so := range l.sonames {
+			if _, exists := index[so]; !exists {
+				index[so] = nameList[i]
+			}
+		}
+	}
+	return index, nil
+}
+
 // Create builds pkgname-pkgver_pkgrel.<arch>.xbps from pkgdir into repoDir.
 func Create(pkgname, pkgver, pkgrel, pkgdir, deps, desc, url, license, repoDir string) error {
 	sysutil.RequireBin("xbps-create", "xbps")

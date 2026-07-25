@@ -12,8 +12,10 @@ import (
 	"strings"
 	"sync"
 
+	"vur/internal/archrepo"
 	"vur/internal/aurapi"
 	"vur/internal/pkgbuild"
+	"vur/internal/ui"
 	"vur/internal/xbpsutil"
 )
 
@@ -25,6 +27,7 @@ type Class int
 const (
 	Installed Class = iota
 	Available
+	SonameMatch // resolved by matching Arch's real shared-library sonames to a Void package providing the same ones, not by name
 	AUR
 	Unresolved
 )
@@ -104,6 +107,9 @@ type Resolver struct {
 	cache     map[string]Classification
 	planSeen  map[string]bool
 	planStack []string
+
+	sonameIndex     map[string]string
+	sonameIndexOnce sync.Once
 }
 
 func NewResolver(userDepmap, repoDir string) *Resolver {
@@ -116,8 +122,25 @@ func NewResolver(userDepmap, repoDir string) *Resolver {
 	}
 }
 
+// sonames returns the Void soname->pkgname reverse index, built at most
+// once per Resolver (lazily, since it's only needed once a dependency
+// actually falls through to the soname-matching fallback).
+func (r *Resolver) sonames() map[string]string {
+	r.sonameIndexOnce.Do(func() {
+		idx, err := xbpsutil.SonameProviders(r.RepoDir)
+		if err != nil {
+			ui.Warn("couldn't build the shared-library index for cross-distro dependency matching: %v", err)
+			idx = map[string]string{}
+		}
+		r.sonameIndex = idx
+	})
+	return r.sonameIndex
+}
+
 // Classify classifies a raw Arch dependency string against installed
-// packages, Void/local repos, then the AUR, memoized per raw string.
+// packages, Void/local repos, the AUR, and -- as a last resort -- Void
+// packages that ship the same shared libraries as the real Arch package
+// (see archrepo), memoized per raw string.
 func (r *Resolver) Classify(raw string) Classification {
 	if c, ok := r.cache[raw]; ok {
 		return c
@@ -138,13 +161,34 @@ func (r *Resolver) Classify(raw string) Classification {
 		base, _ := aurapi.PackageBase(bare)
 		if base != "" {
 			c = Classification{Class: AUR, ResolvedName: bare, AURBase: base}
-		} else {
-			c = Classification{Class: Unresolved, ResolvedName: bare, Reason: "not installed, not in Void repos, not found in AUR"}
+			break
 		}
+		if voidName, ok := r.matchBySoname(bare); ok {
+			c = Classification{Class: SonameMatch, ResolvedName: voidName}
+			ui.Info("'%s' has no Void package by that name, but '%s' provides the same shared libraries -- using it", bare, voidName)
+			break
+		}
+		c = Classification{Class: Unresolved, ResolvedName: bare, Reason: "not installed, not in Void repos, not found in AUR"}
 	}
 
 	r.cache[raw] = c
 	return c
+}
+
+// matchBySoname looks up name as a real Arch package, and checks whether
+// any Void package provides one of the same shared libraries it ships.
+func (r *Resolver) matchBySoname(name string) (string, bool) {
+	sonames := archrepo.Sonames(name)
+	if len(sonames) == 0 {
+		return "", false
+	}
+	index := r.sonames()
+	for _, so := range sonames {
+		if voidName, ok := index[so]; ok {
+			return voidName, true
+		}
+	}
+	return "", false
 }
 
 // ReviewFunc reviews+loads a freshly cloned/updated AUR package base's
@@ -177,7 +221,7 @@ func (r *Resolver) Resolve(pkgbase, gitdir, buildDir string, clone CloneFunc, re
 	for _, raw := range combined {
 		c := r.Classify(raw)
 		switch c.Class {
-		case Installed, Available:
+		case Installed, Available, SonameMatch:
 			// nothing to do
 		case AUR:
 			r.Edges[pkgbase] = append(r.Edges[pkgbase], c.AURBase)

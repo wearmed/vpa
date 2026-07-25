@@ -62,7 +62,12 @@ vur rm pipes.sh
    model as yay/paru/pikaur. `--edit` lets you change it first.
 3. Resolves `depends`/`makedepends` against Void's xbps repos, using
    `depmap.conf` to bridge Arch/Void naming drift (e.g. `gtk2` → `gtk+`).
-   Anything AUR-only gets built recursively, with cycle detection.
+   If a dependency has no Void package by that name, before giving up vur
+   checks what shared libraries the real Arch package ships (via Arch's
+   package database) against what Void packages actually provide (e.g.
+   Arch's `libxss` → Void's `libXScrnSaver`, both shipping `libXss.so.1`)
+   — matching on real ABI instead of guessing from spelling. Anything still
+   unresolved and AUR-only gets built recursively, with cycle detection.
 4. Downloads sources (concurrently, cached by checksum so rebuilds skip
    unchanged ones), verifies checksums, extracts archives.
 5. Runs `build()` as your user (with `MAKEFLAGS`/`CARGO_BUILD_JOBS` set to
@@ -84,6 +89,9 @@ vur rm pipes.sh
   PKGBUILD's dynamic `pkgver()` is never invoked, so the version string can lag.
 - Imported Arch/`.deb`/RPM packages carry no real dependency information —
   their declared deps are just printed as a warning, not installed.
+- Shared-library dependency matching only works for actual libraries —
+  virtual/meta dependency names with no `.so` file (e.g. `ttf-font`) can't
+  be matched this way and stay unresolved.
 
 ## Credits
 

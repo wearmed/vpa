@@ -82,6 +82,13 @@
     "rpm2cpio",
     "globone",
     "xdata",
-    "pkgtype"
+    "pkgtype",
+    "archrepo",
+    "sonames",
+    "soname",
+    "shlib",
+    "getpkgname",
+    "libxss",
+    "uhelper"
   ]
 }
