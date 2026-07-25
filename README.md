@@ -72,10 +72,8 @@ vur rm pipes.sh
 
 ## Credits
 
-Most of the UX ideas here — the numbered install picker, `--devel` rebuilds,
-PKGBUILD review-before-build, `--edit` — are lifted straight from
-[yay](https://github.com/Jguer/yay). vur is really just yay's ideas retargeted
-at xbps instead of pacman, with the vpm-style CLI grafted on top.
+The whole project was inspired by [yay](https://github.com/Jguer/yay).
+vur is basically trying to replicate it for Void Linux, rather than Arch.
 
 ## License
 
