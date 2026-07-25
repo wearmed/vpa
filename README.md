@@ -172,8 +172,7 @@ takes cues from [vpm](https://github.com/netzverweigerer/vpm).
 
 ## License
 
-Copyright (C) 2026 suraj. Licensed under the GNU General Public License
-v3 — see [LICENSE](LICENSE).
+GPLv3 — see [LICENSE](LICENSE).
 
 Free software: use it, modify it, share it. If you distribute a modified
 version, it has to stay GPLv3 and ship its source too, so vpa can never be
