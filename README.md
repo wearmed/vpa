@@ -26,10 +26,19 @@ vur search  (s)  <term>            search the AUR
 vur info         <pkg>             show AUR package details
 vur install (i)  <pkg> [pkg..]     build and install package(s)
 vur remove  (rm) <pkg> [pkg..]     remove package(s)
-vur upgrade (up)                   system upgrade + rebuild outdated AUR packages
+vur update  (up)                   system upgrade + rebuild outdated AUR packages
+vur upgrade (su)                   update vur itself (git pull + rebuild)
 vur clean   (cl)                   wipe the build cache and local package repo
 vur list    (ls)                   list packages vur has installed
+vur help    (h, ?)                 show usage
 ```
+
+`vur`, `vur help`, `vur h` and `vur ?` all show the general help. Each
+subcommand has its own usage text too — `vur help install`, `vur install
+--help`, or just `vur install` with no arguments will show it.
+
+Note the two similarly-named commands: **`update`** updates your installed
+*packages*, **`upgrade`** updates *vur itself*.
 
 Flags (anywhere on the command line): `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
 `--edit` (open PKGBUILD in `$EDITOR` first), `--devel` (also rebuild `-git`
@@ -54,7 +63,8 @@ vur i -y --edit somefuzzyterm
 vur i ./something.deb
 vur i ./something.xbps
 vur i firefox            # already in Void's repos -> installs directly
-vur up --devel
+vur update --devel       # update installed packages
+vur upgrade              # update vur itself
 vur rm pipes.sh
 ```
 

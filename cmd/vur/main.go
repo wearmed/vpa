@@ -30,10 +30,11 @@ OPTIONS:
 --noconfirm, -y               - Never prompt for confirmation
 --edit                         - Open each PKGBUILD in $EDITOR before building
 --devel                        - Also rebuild -git/-svn/-hg packages on
-                                  upgrade if upstream moved past pkgver
+                                  update if upstream moved past pkgver
 --parallel=<N>                - Concurrent source downloads per package
                                   (default: 4)
---help                         - (same as: help)
+--help                         - Show this message, or a subcommand's own
+                                  usage if one was given (e.g. vur install --help)
 
 SUBCOMMANDS:
 search (s) <term>             - Search the AUR
@@ -42,12 +43,14 @@ install (i) <pkg(s)>           - Build and install <package(s)> from the AUR
                                   (no exact match opens an interactive
                                   numbered picker over the search results)
 remove (rm) <pkg(s)>            - Remove <package(s)> (via xbps-remove)
-upgrade (up)                   - Offer a full system upgrade, then rebuild
+update (up)                    - Offer a full system upgrade, then rebuild
                                   any vur-tracked package with a newer
                                   AUR version
+upgrade (su)                   - Update vur itself (git pull + rebuild)
 clean (cl)                     - Wipe the build cache and local package repo
 list (ls)                      - List packages vur has installed
-help                            - Show usage information
+help (h, ?)                    - Show this message, or run 'vur help <cmd>'
+                                  for a subcommand's own usage
 helppager (hp)                 - Show usage information (piped to $PAGER)
 
 CONFIG FILE:
@@ -84,6 +87,7 @@ func main() {
 	ui.SetColors("auto")
 
 	var rest []string
+	wantHelp := false
 	for _, a := range os.Args[1:] {
 		switch {
 		case a == "--noconfirm" || a == "-y":
@@ -99,44 +103,79 @@ func main() {
 			if n, err := strconv.Atoi(strings.TrimPrefix(a, "--parallel=")); err == nil && n > 0 {
 				cfg.Parallel = n
 			}
-		case a == "--help":
-			usage()
-			os.Exit(0)
+		case a == "--help" || a == "-h":
+			wantHelp = true
 		default:
 			rest = append(rest, a)
 		}
 	}
 
-	var cmd string
+	var rawCmd string
 	if len(rest) > 0 {
-		cmd = rest[0]
+		rawCmd = rest[0]
 		rest = rest[1:]
+	}
+	cmd := canonicalCommand(rawCmd)
+
+	// --help/-h anywhere on the line shows that subcommand's own usage if
+	// one was given (e.g. `vur install --help`), otherwise the general one.
+	if wantHelp {
+		if cmd == "" || !printCommandHelp(cmd) {
+			usage()
+		}
+		return
+	}
+
+	// `vur help <cmd>` shows <cmd>'s own usage; bare `vur help`/`h`/`?` (or
+	// no command at all) shows the general one.
+	if cmd == "help" || rawCmd == "" {
+		if len(rest) > 0 && printCommandHelp(rest[0]) {
+			return
+		}
+		usage()
+		return
 	}
 
 	app := &App{Cfg: cfg}
 
 	var runErr error
 	switch cmd {
-	case "search", "s":
+	case "search":
+		if len(rest) == 0 {
+			printCommandHelp(cmd)
+			os.Exit(1)
+		}
 		runErr = app.cmdSearch(rest)
 	case "info":
+		if len(rest) == 0 {
+			printCommandHelp(cmd)
+			os.Exit(1)
+		}
 		runErr = app.cmdInfo(rest)
-	case "install", "i":
+	case "install":
+		if len(rest) == 0 {
+			printCommandHelp(cmd)
+			os.Exit(1)
+		}
 		runErr = app.cmdInstall(rest)
-	case "remove", "rm":
+	case "remove":
+		if len(rest) == 0 {
+			printCommandHelp(cmd)
+			os.Exit(1)
+		}
 		runErr = app.cmdRemove(rest)
-	case "upgrade", "up":
-		runErr = app.cmdUpgrade()
-	case "clean", "cl":
+	case "update":
+		runErr = app.cmdUpdate()
+	case "upgrade":
+		runErr = cmdSelfUpgrade()
+	case "clean":
 		runErr = app.cmdClean()
-	case "list", "ls":
+	case "list":
 		runErr = app.cmdList()
-	case "helppager", "hp":
+	case "helppager":
 		helpPager()
-	case "", "-h", "help":
-		usage()
 	default:
-		ui.Die("unknown command '%s' (try: vur help)", cmd)
+		ui.Die("unknown command '%s' (try: vur help)", rawCmd)
 	}
 
 	if runErr != nil {

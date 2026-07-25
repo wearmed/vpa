@@ -320,7 +320,7 @@ func (a *App) cmdRemove(pkgs []string) error {
 	return nil
 }
 
-func (a *App) cmdUpgrade() error {
+func (a *App) cmdUpdate() error {
 	if ui.Confirm("Run a full system upgrade first (sudo xbps-install -Su)?") {
 		// -y here too: with --noconfirm, xbps-install's own nested confirmation
 		// prompt would otherwise still block waiting for interactive input
