@@ -23,6 +23,12 @@ import (
 
 type App struct {
 	Cfg *config.Config
+	// ExplicitYes records that --noconfirm/-y was actually passed on the
+	// command line, as opposed to yes simply being the configured default.
+	// Reviewing an unseen AUR build script is a security decision rather
+	// than a routine confirmation, so it keeps asking under the default
+	// and only auto-approves when you've explicitly said to.
+	ExplicitYes bool
 }
 
 func (a *App) gitDir(pkgbase string) string {

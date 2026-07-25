@@ -97,9 +97,19 @@ func trimNewline(s string) string {
 // default when the user just presses enter) and returns the chosen letter
 // in lowercase. Honors NoConfirm by taking the default.
 func Ask(prompt string, choices string, format string, a ...any) string {
+	return ask(NoConfirm, prompt, choices, format, a...)
+}
+
+// AskAlways is Ask, but ignores NoConfirm -- for the one decision that
+// isn't a routine confirmation (approving a stranger's build script).
+func AskAlways(prompt string, choices string, format string, a ...any) string {
+	return ask(false, prompt, choices, format, a...)
+}
+
+func ask(autoAnswer bool, prompt string, choices string, format string, a ...any) string {
 	msg := fmt.Sprintf(format, a...)
 	def := strings.ToLower(string(choices[0]))
-	if NoConfirm {
+	if autoAnswer {
 		Info("%s [auto: %s]", msg, def)
 		return def
 	}

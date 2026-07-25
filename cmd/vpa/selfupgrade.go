@@ -34,11 +34,12 @@ func vpaCheckout() (string, error) {
 	return root, nil
 }
 
-// selfUpdateIfAvailable fetches vpa's own repo and, only if the checkout is
-// actually behind, pulls and rebuilds. Silent when already current, so it
-// can run unconditionally as part of every `vpa update` without adding
-// noise to the common case.
+// selfUpdateIfAvailable checks vpa's own repo for a newer version and, if
+// the checkout is behind, pulls and rebuilds. Reports either way, so
+// `vpa update` visibly accounts for vpa itself rather than leaving you to
+// wonder whether it was checked.
 func selfUpdateIfAvailable() error {
+	ui.Info("checking for a newer vpa...")
 	root, err := vpaCheckout()
 	if err != nil {
 		return err
@@ -54,7 +55,8 @@ func selfUpdateIfAvailable() error {
 		return fmt.Errorf("couldn't compare local and upstream revisions")
 	}
 	if strings.TrimSpace(local) == strings.TrimSpace(remote) {
-		return nil // already current
+		ui.Ok("vpa is already up to date")
+		return nil
 	}
 
 	ui.Info("a newer vpa is available -- updating %s", root)

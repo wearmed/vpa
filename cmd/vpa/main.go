@@ -1,6 +1,6 @@
 // vpa -- Void Package Assistant: the only Void package manager you'll need.
 //
-// Copyright (C) 2026 suraj
+// # Copyright (C) 2026 suraj
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the
@@ -40,6 +40,10 @@ Getting started:
 vpa installs from Void's own repositories, the AUR, and .xbps/.deb/.rpm
 package files -- you don't have to know which is which, just name what
 you want.
+
+vpa assumes yes and gets on with it. "vpa --assumeno" makes it ask first
+(and "vpa --assumeyes" switches back) -- either way it still shows you an
+AUR build script it hasn't seen before, since that runs someone else's code.
 
   vpa help <command>     how a specific command works
   vpa help --all         every command vpa has
@@ -98,7 +102,11 @@ help (h, ?) [command]         - Show help, or help for one command
 helppager (hp)                - Show this, piped through $PAGER
 
 OPTIONS:
---noconfirm, -y               - Don't ask for confirmation
+--assumeyes / --assumeno      - Set whether vpa asks before making changes
+                                 (saved; assumeyes is the default)
+--noconfirm, -y               - Don't ask anything this run, including an
+                                 unseen AUR build script
+--confirm                     - Ask before making changes, just this run
 --edit                        - Edit an AUR build script before building
 --devel                       - Also rebuild -git packages whose upstream
                                  code changed
@@ -146,11 +154,21 @@ func main() {
 	var rest []string
 	wantHelp := false
 	wantAll := false
+	explicitYes := false
+	var setDefault string
 	for _, a := range os.Args[1:] {
 		switch {
 		case a == "--noconfirm" || a == "-y":
 			cfg.NoConfirm = true
 			ui.NoConfirm = true
+			explicitYes = true
+		case a == "--confirm":
+			cfg.NoConfirm = false
+			ui.NoConfirm = false
+		case a == "--assumeyes":
+			setDefault = "1"
+		case a == "--assumeno":
+			setDefault = "0"
 		case a == "--edit":
 			cfg.EditPKGBUILD = true
 		case a == "--devel":
@@ -168,6 +186,19 @@ func main() {
 		default:
 			rest = append(rest, a)
 		}
+	}
+
+	if setDefault != "" {
+		if err := config.SetOption(cfg.ConfigFile, "NOCONFIRM", setDefault); err != nil {
+			ui.Die("couldn't save that setting: %v", err)
+		}
+		if setDefault == "1" {
+			ui.Ok("vpa will assume yes from now on. Run 'vpa --assumeno' to go back to asking.")
+			ui.Info("The one thing it still asks about is an AUR build script it hasn't seen before, since that runs a stranger's code on your machine. Set TRUST_AUR=1 in %s to skip that too.", cfg.ConfigFile)
+		} else {
+			ui.Ok("vpa will ask before making changes from now on. Run 'vpa --assumeyes' to stop asking.")
+		}
+		return
 	}
 
 	var rawCmd string
@@ -210,7 +241,7 @@ func main() {
 		return
 	}
 
-	app := &App{Cfg: cfg}
+	app := &App{Cfg: cfg, ExplicitYes: explicitYes}
 
 	var runErr error
 	switch cmd {

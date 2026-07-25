@@ -92,6 +92,18 @@ built from the AUR; `vpa list --aur` narrows it to just those.
 Updates everything in one go: vpa itself (if a newer version exists), a full
 system upgrade, then any AUR package vpa tracks.
 
+### Asking before it does things
+
+vpa assumes yes and gets on with it. `vpa --assumeno` makes it ask first,
+`vpa --assumeyes` switches back — the setting is saved, so you only do it
+once. `--confirm` and `--noconfirm`/`-y` override it for a single run.
+
+One thing always asks regardless: an AUR build script vpa hasn't shown you
+before. That's a stranger's code about to run on your machine, so it isn't
+treated as a routine confirmation. Passing `--noconfirm` explicitly skips it
+for scripting, or set `TRUST_AUR=1` in the config if you never want to be
+asked.
+
 ### Flags
 
 Anywhere on the command line: `--color=<yes|no|auto>`, `--noconfirm`/`-y`,

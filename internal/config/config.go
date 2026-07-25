@@ -21,6 +21,7 @@ type Config struct {
 	UserDepmap   string
 
 	NoConfirm    bool
+	TrustAUR     bool
 	EditPKGBUILD bool
 	Devel        bool
 	CleanAfter   bool
@@ -65,6 +66,9 @@ func Load() (*Config, error) {
 		UserDepmap:   filepath.Join(configDir, "depmap.conf"),
 		Editor:       firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"), "vi"),
 		Parallel:     4,
+		// Routine confirmations default to yes; toggle with
+		// `vpa --assumeno` (or NOCONFIRM=0 in the config file).
+		NoConfirm: true,
 	}
 
 	for _, d := range []string{c.BuildDir, c.RepoDir, c.ReviewedDir, c.ConfigDir} {
@@ -106,6 +110,8 @@ func (c *Config) loadFile() error {
 		switch key {
 		case "NOCONFIRM":
 			c.NoConfirm = val == "1"
+		case "TRUST_AUR":
+			c.TrustAUR = val == "1"
 		case "EDIT_PKGBUILD":
 			c.EditPKGBUILD = val == "1"
 		case "DEVEL":
@@ -165,4 +171,35 @@ func migrateLegacyFile(old, new string) {
 	if err := os.Rename(old, new); err == nil {
 		fmt.Fprintf(os.Stderr, ":: migrated %s -> %s (project renamed vur -> vpa)\n", old, new)
 	}
+}
+
+// SetOption updates (or adds) a KEY=value line in the config file,
+// preserving everything else in it including comments, so the file stays
+// something a person can still read and edit by hand.
+func SetOption(path, key, value string) error {
+	var lines []string
+	if data, err := os.ReadFile(path); err == nil {
+		lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	}
+
+	replaced := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if k, _, ok := strings.Cut(trimmed, "="); ok && strings.TrimSpace(k) == key {
+			lines[i] = key + "=" + value
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		lines = append(lines, key+"="+value)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }

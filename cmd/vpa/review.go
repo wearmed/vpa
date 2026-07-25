@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"vpa/internal/pkgbuild"
-	"vpa/internal/sysutil"
 	"vpa/internal/systemdcheck"
+	"vpa/internal/sysutil"
 	"vpa/internal/ui"
 )
 
@@ -25,6 +25,11 @@ import (
 // won't actually read, keep the full script one keypress away, and say
 // plainly what approving it means.
 func (a *App) reviewAndLoad(pkgbase, dir string) (*pkgbuild.PKGBUILD, error) {
+	// Approving a build script is a security decision, not a routine
+	// confirmation, so having "assume yes" configured as the default isn't
+	// enough to skip it -- that takes an explicit --noconfirm on the
+	// command line, or TRUST_AUR=1 set deliberately in the config.
+	autoApprove := a.ExplicitYes || a.Cfg.TrustAUR
 	snapshot := filepath.Join(a.Cfg.ReviewedDir, pkgbase+".PKGBUILD")
 	pkgbuildPath := filepath.Join(dir, "PKGBUILD")
 
@@ -59,7 +64,11 @@ func (a *App) reviewAndLoad(pkgbase, dir string) (*pkgbuild.PKGBUILD, error) {
 			choices += "e"
 		}
 
-		switch ui.Ask(prompt+"?", choices, "Install '%s'?", pkgbase) {
+		answer := "y"
+		if !autoApprove {
+			answer = ui.AskAlways(prompt+"?", choices, "Install '%s'?", pkgbase)
+		}
+		switch answer {
 		case "y":
 			if err := os.WriteFile(snapshot, cur, 0o644); err != nil {
 				return nil, err
