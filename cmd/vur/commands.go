@@ -306,6 +306,16 @@ func (a *App) cmdRemove(pkgs []string) error {
 	if err := xbpsutil.Remove(pkgs...); err != nil {
 		return err
 	}
+	if err := a.forgetRemoved(pkgs); err != nil {
+		return err
+	}
+	ui.Ok("removed: %s", strings.Join(pkgs, " "))
+	return nil
+}
+
+// forgetRemoved drops packages from vur's manifest after they've been
+// removed from the system, so `vur list`/`vur update` stop tracking them.
+func (a *App) forgetRemoved(pkgs []string) error {
 	m, err := manifest.Load(a.Cfg.ManifestFile)
 	if err != nil {
 		return err
@@ -313,14 +323,18 @@ func (a *App) cmdRemove(pkgs []string) error {
 	for _, p := range pkgs {
 		m.Remove(p)
 	}
-	if err := m.Save(); err != nil {
-		return err
-	}
-	ui.Ok("removed: %s", strings.Join(pkgs, " "))
-	return nil
+	return m.Save()
 }
 
 func (a *App) cmdUpdate() error {
+	// vur updates itself as part of a normal update run -- it's just another
+	// thing on the system that gets out of date, and a stale vur silently
+	// missing fixes is exactly the failure mode worth avoiding. Non-fatal:
+	// a self-update problem shouldn't block updating actual packages.
+	if err := selfUpdateIfAvailable(); err != nil {
+		ui.Warn("couldn't update vur itself: %v", err)
+	}
+
 	if ui.Confirm("Run a full system upgrade first (sudo xbps-install -Su)?") {
 		// -y here too: with --noconfirm, xbps-install's own nested confirmation
 		// prompt would otherwise still block waiting for interactive input

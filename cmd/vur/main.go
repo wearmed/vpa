@@ -43,15 +43,26 @@ install (i) <pkg(s)>           - Build and install <package(s)> from the AUR
                                   (no exact match opens an interactive
                                   numbered picker over the search results)
 remove (rm) <pkg(s)>            - Remove <package(s)> (via xbps-remove)
-update (up)                    - Offer a full system upgrade, then rebuild
-                                  any vur-tracked package with a newer
-                                  AUR version
-upgrade (su)                   - Update vur itself (git pull + rebuild)
+update (up, upgrade, su)       - Update everything: vur itself (if a newer
+                                  version exists), a full system upgrade,
+                                  then any vur-tracked AUR package
 clean (cl)                     - Wipe the build cache and local package repo
 list (ls)                      - List packages vur has installed
 help (h, ?)                    - Show this message, or run 'vur help <cmd>'
                                   for a subcommand's own usage
 helppager (hp)                 - Show usage information (piped to $PAGER)
+
+PACMAN-STYLE FLAGS:
+Also accepts pacman's own syntax, with pacman's semantics:
+-S <pkg>      install          -Ss <term>    search
+-Sy           refresh repos    -Si <pkg>     package info
+-Su           upgrade          -Sc / -Scc    clean package cache
+-Syu / -Syyu  refresh+upgrade  -U <file>     install a local package file
+-R <pkg>      remove           -Rs <pkg>     remove + unneeded deps
+-Q            list installed   -Qi <pkg>     installed package info
+-Qs <term>    search installed -Ql <pkg>     list a package's files
+-Qe           explicitly installed          -Qo <file>  which package owns file
+-Qdt          orphans
 
 CONFIG FILE:
 ~/.config/vur/vur.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
@@ -88,7 +99,13 @@ func main() {
 
 	var rest []string
 	wantHelp := false
+	var pacOp pacmanOp
+	havePacOp := false
 	for _, a := range os.Args[1:] {
+		if p, ok := parsePacmanOp(a); ok {
+			pacOp, havePacOp = p, true
+			continue
+		}
 		switch {
 		case a == "--noconfirm" || a == "-y":
 			cfg.NoConfirm = true
@@ -108,6 +125,16 @@ func main() {
 		default:
 			rest = append(rest, a)
 		}
+	}
+
+	// pacman-style invocation (-S, -Syu, -Rns, -Qi, ...) takes over
+	// entirely; everything left in rest is its operands.
+	if havePacOp {
+		app := &App{Cfg: cfg}
+		if err := app.runPacmanOp(pacOp, rest); err != nil {
+			ui.Die("%v", err)
+		}
+		return
 	}
 
 	var rawCmd string
@@ -166,8 +193,6 @@ func main() {
 		runErr = app.cmdRemove(rest)
 	case "update":
 		runErr = app.cmdUpdate()
-	case "upgrade":
-		runErr = cmdSelfUpgrade()
 	case "clean":
 		runErr = app.cmdClean()
 	case "list":

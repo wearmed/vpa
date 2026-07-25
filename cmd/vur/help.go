@@ -16,10 +16,8 @@ func canonicalCommand(name string) string {
 		return "install"
 	case "remove", "rm":
 		return "remove"
-	case "update", "up":
+	case "update", "up", "upgrade", "su":
 		return "update"
-	case "upgrade", "su":
-		return "upgrade"
 	case "clean", "cl":
 		return "clean"
 	case "list", "ls":
@@ -71,26 +69,21 @@ Remove installed package(s), via xbps-remove.
 Example:
   vur remove pipes.sh
 `,
-	"update": `vur update (up)
+	"update": `vur update (up, upgrade, su)
 
-Offer a full system upgrade (sudo xbps-install -Su), then rebuild any
-vur-tracked package with a newer AUR version. This is the one that
-updates your installed packages -- see 'vur upgrade' to update vur
-itself instead.
+Update everything:
+  1. vur itself, if a newer version is available (silent if current)
+  2. a full system upgrade (sudo xbps-install -Su)
+  3. any vur-tracked AUR package with a newer version
 
 Relevant flags: --devel (also rebuild -git/-svn/-hg packages if
 upstream moved past pkgver even though the version string didn't
 change), --noconfirm/-y
 
-Example:
+Examples:
+  vur update
   vur update --devel
-`,
-	"upgrade": `vur upgrade (su)
-
-Update vur itself: git pull + rebuild in place, in whatever checkout
-it was originally installed from (the default ~/.local/share/vur clone
-from the curl installer, or a manual git clone). Doesn't touch any
-installed packages -- see 'vur update' for that.
+  vur -Syu
 `,
 	"clean": `vur clean (cl)
 
