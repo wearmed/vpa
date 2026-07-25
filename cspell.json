@@ -57,6 +57,15 @@
     "curcommit",
     "curcommits",
     "multiinfo",
-    "pkgs"
+    "pkgs",
+    "ldflags",
+    "aurapi",
+    "buildpkg",
+    "xbpsutil",
+    "sysutil",
+    "gitutil",
+    "systemdcheck",
+    "cgo",
+    "resultcount"
   ]
 }

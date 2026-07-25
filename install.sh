@@ -14,7 +14,7 @@ die()  { printf '%s:: error:%s %s\n' "$c_red" "$c_reset" "$*" >&2; exit 1; }
 BIN_DIR="${VUR_BIN_DIR:-$HOME/.local/bin}"
 [[ "${1:-}" == "--system" ]] && BIN_DIR=/usr/local/bin
 
-[[ -x "$ROOT/vur" && -d "$ROOT/lib" ]] || die "run this from inside a cloned vur checkout (missing ./vur or ./lib)"
+[[ -f "$ROOT/go.mod" && -d "$ROOT/cmd/vur" ]] || die "run this from inside a cloned vur checkout (missing ./go.mod or ./cmd/vur)"
 
 if [[ -r /etc/os-release ]] && ! grep -Eq '^ID="?void"?$' /etc/os-release; then
   warn "this doesn't look like Void Linux -- vur relies on xbps and won't work anywhere else"
@@ -26,7 +26,7 @@ command -v xbps-install >/dev/null 2>&1 || die "xbps-install not found -- is thi
 
 info "checking build-time dependencies"
 missing=()
-for bin_pkg in "git:git" "curl:curl" "jq:jq" "fakeroot:fakeroot"; do
+for bin_pkg in "go:go" "git:git" "curl:curl" "fakeroot:fakeroot"; do
   bin=${bin_pkg%%:*} pkg=${bin_pkg#*:}
   command -v "$bin" >/dev/null 2>&1 || missing+=("$pkg")
 done
@@ -37,9 +37,12 @@ else
   ok "all build-time dependencies already present"
 fi
 
+info "building vur (static binary, no runtime deps besides git/fakeroot/xbps)"
+( cd "$ROOT" && CGO_ENABLED=0 go build -ldflags="-s -w" -o vur ./cmd/vur ) \
+  || die "go build failed"
+
 mkdir -p "$BIN_DIR"
 ln -sf "$ROOT/vur" "$BIN_DIR/vur"
-chmod +x "$ROOT/vur"
 ok "linked $BIN_DIR/vur -> $ROOT/vur"
 
 case ":$PATH:" in

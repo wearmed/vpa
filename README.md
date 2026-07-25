@@ -8,10 +8,13 @@ with a minimal makepkg-like driver, and packages the result as a real
 through `xbps` like any native Void package, not just dumped onto the
 filesystem with `make install`.
 
-## Install
+Written in Go, compiled to a single static binary — no `jq`, no sourcing a
+pile of `lib/*.sh` files, nothing to keep in sync. PKGBUILDs are themselves
+arbitrary bash, so parsing/building still shells out to `bash`/`git`/
+`fakeroot`/`xbps-*`, same as any AUR helper; Go's job is orchestration, JSON
+(native, no `jq`), and packaging everything into one file.
 
-Same shape as bringing up `yay` for the first time on Arch
-(`git clone ... && cd yay && makepkg -si`):
+## Install
 
 ```sh
 git clone git@git.wearmed.xyz:suraj/vur.git
@@ -19,8 +22,10 @@ cd vur
 ./install.sh
 ```
 
-`install.sh` checks you're on Void, installs `git`/`curl`/`jq`/`fakeroot` if
-missing, symlinks `vur` into `~/.local/bin` (or `/usr/local/bin` with
+`install.sh` checks you're on Void, installs `go`/`git`/`curl`/`fakeroot` if
+missing, builds a static binary (`CGO_ENABLED=0 go build -ldflags="-s -w"`,
+~6.7MB, zero runtime dependencies besides `git`/`fakeroot`/`xbps`/`bash`),
+symlinks it into `~/.local/bin` (or `/usr/local/bin` with
 `./install.sh --system`), and writes a starter config to
 `~/.config/vur/vur.conf`. Safe to re-run.
 
@@ -85,9 +90,10 @@ vur rm pipes.sh
    nothing changed). `--edit` opens it in `$EDITOR` first if you want to
    change anything.
 3. Resolves `depends`/`makedepends` against Void's xbps repos, using
-   `config/depmap.conf` to bridge Arch/Void package-name drift (e.g. `gtk2`
-   → `gtk+`). Anything not in Void's repos but valid on the AUR is built
-   recursively, in dependency order, with cycle detection.
+   `internal/deps/depmap.conf` (embedded in the binary; override/extend via
+   `~/.config/vur/depmap.conf`) to bridge Arch/Void package-name drift (e.g.
+   `gtk2` → `gtk+`). Anything not in Void's repos but valid on the AUR is
+   built recursively, in dependency order, with cycle detection.
 4. Downloads sources (`source=()`), verifying `sha256sums`/`sha512sums`/
    `b2sums`/`md5sums` and auto-extracting recognized archives.
 5. Runs `prepare()`/`build()` as your normal user, then
