@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"vur/internal/sysutil"
-	"vur/internal/ui"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
 )
 
 // pacmanOp is a parsed pacman-style invocation (e.g. "-Syu", "-Rns").
@@ -20,7 +20,7 @@ func (p pacmanOp) count(m byte) int { return p.mods[m] }
 
 // parsePacmanOp recognizes a pacman-style bundled short-flag argument
 // ("-Syu", "-Rns", "-Qi", ...). Returns ok=false for anything else,
-// including vur's own long flags and bare "-y"/"-h" (which stay
+// including vpa's own long flags and bare "-y"/"-h" (which stay
 // --noconfirm and --help respectively rather than being reinterpreted).
 func parsePacmanOp(arg string) (pacmanOp, bool) {
 	if len(arg) < 2 || arg[0] != '-' || arg[1] == '-' {
@@ -39,7 +39,7 @@ func parsePacmanOp(arg string) (pacmanOp, bool) {
 }
 
 // runPacmanOp executes a parsed pacman-style operation, mapping it onto
-// the equivalent xbps/vur behavior. Semantics follow pacman's: the
+// the equivalent xbps/vpa behavior. Semantics follow pacman's: the
 // modifiers decompose the same way (-Sy refreshes only, -Su upgrades
 // only, -Syu does both), and the -Q family queries installed packages
 // rather than remote ones.
@@ -53,7 +53,7 @@ func (a *App) runPacmanOp(p pacmanOp, args []string) error {
 		return a.pacmanQuery(p, args)
 	case 'U':
 		if len(args) == 0 {
-			return fmt.Errorf("-U needs one or more package files (e.g. vur -U ./foo.xbps)")
+			return fmt.Errorf("-U needs one or more package files (e.g. vpa -U ./foo.xbps)")
 		}
 		return a.cmdInstall(args)
 	}
@@ -117,7 +117,7 @@ func (a *App) pacmanSync(p pacmanOp, args []string) error {
 }
 
 // syncRepos refreshes repository indexes. force (-Syy) additionally drops
-// vur's own sync-freshness marker so the next install re-syncs too, which
+// vpa's own sync-freshness marker so the next install re-syncs too, which
 // is the closest equivalent to pacman's "force refresh even if it looks
 // current" -- xbps-install -S always re-fetches repodata regardless, so
 // there's no separate "extra forceful" fetch to ask it for.

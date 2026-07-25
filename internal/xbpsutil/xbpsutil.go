@@ -1,4 +1,4 @@
-// Package xbpsutil wraps the xbps-* CLI tools vur needs.
+// Package xbpsutil wraps the xbps-* CLI tools vpa needs.
 package xbpsutil
 
 import (
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"vur/internal/sysutil"
+	"vpa/internal/sysutil"
 )
 
 // Arch returns the configured xbps architecture (e.g. "x86_64").
@@ -95,7 +95,7 @@ func Create(pkgname, pkgver, pkgrel, pkgdir, deps, desc, url, license, repoDir s
 		return fmt.Errorf("create_xbps_pkg: empty pkgname (broken PKGBUILD?)")
 	}
 	if pkgver == "" {
-		return fmt.Errorf("%s: empty pkgver -- likely a -git/-svn/-hg PKGBUILD whose pkgver() vur doesn't invoke; set pkgver= manually with --edit", pkgname)
+		return fmt.Errorf("%s: empty pkgver -- likely a -git/-svn/-hg PKGBUILD whose pkgver() vpa doesn't invoke; set pkgver= manually with --edit", pkgname)
 	}
 	fi, err := os.Stat(pkgdir)
 	if err != nil || !fi.IsDir() {
@@ -114,7 +114,7 @@ func Create(pkgname, pkgver, pkgrel, pkgdir, deps, desc, url, license, repoDir s
 		desc = pkgname
 	}
 	// compression=none: this repo is a throwaway local staging area (wiped by
-	// `vur clean`), so there's nothing to gain from spending CPU time
+	// `vpa clean`), so there's nothing to gain from spending CPU time
 	// compressing a package that's about to be immediately re-unpacked by
 	// xbps-install -- pure overhead for us.
 	args := []string{"-A", arch, "-n", fmt.Sprintf("%s-%s_%s", pkgname, pkgver, pkgrel), "-s", desc, "--compression", "none"}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources a PKGBUILD (the only reliable way to parse it) and emits its
-# variables as NUL-delimited records vur can parse without touching bash's
+# variables as NUL-delimited records vpa can parse without touching bash's
 # declare -p quoting rules: "S\tname\tvalue\0" for scalars, "A\tname\0"
 # followed by "I\tvalue\0" per element for arrays, "X\tname\0" + "I\t...\0"
 # for an arch-specific override array (e.g. source_x86_64) whose items get

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"sync"
 
-	"vur/internal/archrepo"
-	"vur/internal/aurapi"
-	"vur/internal/pkgbuild"
-	"vur/internal/ui"
-	"vur/internal/xbpsutil"
+	"vpa/internal/archrepo"
+	"vpa/internal/aurapi"
+	"vpa/internal/pkgbuild"
+	"vpa/internal/ui"
+	"vpa/internal/xbpsutil"
 )
 
 //go:embed depmap.conf

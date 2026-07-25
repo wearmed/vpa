@@ -1,3 +1,3 @@
-module vur
+module vpa
 
 go 1.26.5

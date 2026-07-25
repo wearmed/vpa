@@ -7,39 +7,39 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vur/internal/sysutil"
-	"vur/internal/ui"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
 )
 
-// vurCheckout resolves the running binary back to the git checkout it was
+// vpaCheckout resolves the running binary back to the git checkout it was
 // built from (through the ~/.local/bin symlink the installer creates), or
 // an error explaining why self-update isn't possible for this install.
-func vurCheckout() (string, error) {
+func vpaCheckout() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("couldn't find vur's own binary path: %w", err)
+		return "", fmt.Errorf("couldn't find vpa's own binary path: %w", err)
 	}
 	real, err := filepath.EvalSymlinks(exe)
 	if err != nil {
-		return "", fmt.Errorf("couldn't resolve vur's binary path: %w", err)
+		return "", fmt.Errorf("couldn't resolve vpa's binary path: %w", err)
 	}
 	root := filepath.Dir(real)
 
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
-		return "", fmt.Errorf("%s isn't a git checkout -- self-update only works when vur was installed via install.sh or a manual git clone", root)
+		return "", fmt.Errorf("%s isn't a git checkout -- self-update only works when vpa was installed via install.sh or a manual git clone", root)
 	}
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		return "", fmt.Errorf("%s doesn't look like a vur checkout (no go.mod)", root)
+		return "", fmt.Errorf("%s doesn't look like a vpa checkout (no go.mod)", root)
 	}
 	return root, nil
 }
 
-// selfUpdateIfAvailable fetches vur's own repo and, only if the checkout is
+// selfUpdateIfAvailable fetches vpa's own repo and, only if the checkout is
 // actually behind, pulls and rebuilds. Silent when already current, so it
-// can run unconditionally as part of every `vur update` without adding
+// can run unconditionally as part of every `vpa update` without adding
 // noise to the common case.
 func selfUpdateIfAvailable() error {
-	root, err := vurCheckout()
+	root, err := vpaCheckout()
 	if err != nil {
 		return err
 	}
@@ -57,8 +57,8 @@ func selfUpdateIfAvailable() error {
 		return nil // already current
 	}
 
-	ui.Info("a newer vur is available -- updating %s", root)
-	if !ui.Confirm("Update vur itself now?") {
+	ui.Info("a newer vpa is available -- updating %s", root)
+	if !ui.Confirm("Update vpa itself now?") {
 		return nil
 	}
 	return pullAndRebuild(root)
@@ -69,8 +69,8 @@ func pullAndRebuild(root string) error {
 		return fmt.Errorf("git pull failed: %w", err)
 	}
 
-	ui.Info("rebuilding vur")
-	cmd := exec.Command("go", "build", "-ldflags=-s -w", "-o", "vur", "./cmd/vur")
+	ui.Info("rebuilding vpa")
+	cmd := exec.Command("go", "build", "-ldflags=-s -w", "-o", "vpa", "./cmd/vpa")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -78,6 +78,6 @@ func pullAndRebuild(root string) error {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
-	ui.Ok("vur updated -- the new version applies from your next vur command")
+	ui.Ok("vpa updated -- the new version applies from your next vpa command")
 	return nil
 }

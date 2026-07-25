@@ -1,4 +1,4 @@
-// vur -- Void User Repository: an AUR helper for Void Linux.
+// vpa -- Void Package Assistant: the only Void package manager you'll need.
 package main
 
 import (
@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"vur/internal/config"
-	"vur/internal/sysutil"
-	"vur/internal/ui"
+	"vpa/internal/config"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
 )
 
 func usageText() string {
@@ -19,11 +19,12 @@ func usageText() string {
 	if xbpsVer == "" {
 		xbpsVer = "unknown"
 	}
-	return fmt.Sprintf(`vur - AUR helper for Void Linux
+	return fmt.Sprintf(`vpa - Void Package Assistant
+the only Void package manager you'll need
 XBPS version: %s
 
 USAGE:
-vur [OPTIONS] [SUBCOMMANDS] [<ARGS>]
+vpa [OPTIONS] [SUBCOMMANDS] [<ARGS>]
 
 OPTIONS:
 --color=<yes|no|auto>        - Enable/disable colorized output (default: auto)
@@ -34,7 +35,7 @@ OPTIONS:
 --parallel=<N>                - Concurrent source downloads per package
                                   (default: 4)
 --help                         - Show this message, or a subcommand's own
-                                  usage if one was given (e.g. vur install --help)
+                                  usage if one was given (e.g. vpa install --help)
 
 SUBCOMMANDS:
 search (s) <term>             - Search the AUR
@@ -43,12 +44,12 @@ install (i) <pkg(s)>           - Build and install <package(s)> from the AUR
                                   (no exact match opens an interactive
                                   numbered picker over the search results)
 remove (rm) <pkg(s)>            - Remove <package(s)> (via xbps-remove)
-update (up, upgrade, su)       - Update everything: vur itself (if a newer
+update (up, upgrade, su)       - Update everything: vpa itself (if a newer
                                   version exists), a full system upgrade,
-                                  then any vur-tracked AUR package
+                                  then any vpa-tracked AUR package
 clean (cl)                     - Wipe the build cache and local package repo
-list (ls)                      - List packages vur has installed
-help (h, ?)                    - Show this message, or run 'vur help <cmd>'
+list (ls)                      - List packages vpa has installed
+help (h, ?)                    - Show this message, or run 'vpa help <cmd>'
                                   for a subcommand's own usage
 helppager (hp)                 - Show usage information (piped to $PAGER)
 
@@ -65,7 +66,7 @@ Also accepts pacman's own syntax, with pacman's semantics:
 -Qdt          orphans
 
 CONFIG FILE:
-~/.config/vur/vur.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
+~/.config/vpa/vpa.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
 `, xbpsVer)
 }
 
@@ -145,7 +146,7 @@ func main() {
 	cmd := canonicalCommand(rawCmd)
 
 	// --help/-h anywhere on the line shows that subcommand's own usage if
-	// one was given (e.g. `vur install --help`), otherwise the general one.
+	// one was given (e.g. `vpa install --help`), otherwise the general one.
 	if wantHelp {
 		if cmd == "" || !printCommandHelp(cmd) {
 			usage()
@@ -153,7 +154,7 @@ func main() {
 		return
 	}
 
-	// `vur help <cmd>` shows <cmd>'s own usage; bare `vur help`/`h`/`?` (or
+	// `vpa help <cmd>` shows <cmd>'s own usage; bare `vpa help`/`h`/`?` (or
 	// no command at all) shows the general one.
 	if cmd == "help" || rawCmd == "" {
 		if len(rest) > 0 && printCommandHelp(rest[0]) {
@@ -200,7 +201,7 @@ func main() {
 	case "helppager":
 		helpPager()
 	default:
-		ui.Die("unknown command '%s' (try: vur help)", rawCmd)
+		ui.Die("unknown command '%s' (try: vpa help)", rawCmd)
 	}
 
 	if runErr != nil {

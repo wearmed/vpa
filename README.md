@@ -1,18 +1,22 @@
-# vur
+# vpa
 
-**V**oid **U**ser **R**epository: an AUR helper for Void Linux.
+**V**oid **P**ackage **A**ssistant — the only Void package manager you'll need.
 
-Fetches PKGBUILDs from the [AUR](https://aur.archlinux.org), builds them, and
-packages the result as a real `.xbps` via `xbps-create` — tracked and cleanly
-removable through `xbps`, not just dumped onto the filesystem. Written in Go,
-ships as a single static binary (no `jq`, no shell library to keep in sync).
-PKGBUILDs are themselves bash, so building still shells out to `bash`/`git`/
-`fakeroot`/`xbps-*` — Go just handles orchestration, JSON, and packaging.
+One tool for everything you install on Void: your normal `xbps` packages, the
+[AUR](https://aur.archlinux.org), standalone `.xbps` files, and even prebuilt
+Debian/RPM/Arch packages. Anything it builds or imports becomes a real `.xbps`
+package, so it's tracked and cleanly removable through `xbps` like everything
+else on your system — never just files dumped onto your filesystem.
+
+Written in Go, ships as a single static binary (no `jq`, no shell library to
+keep in sync). PKGBUILDs are themselves bash, so building them still shells
+out to `bash`/`git`/`fakeroot`/`xbps-*` — Go handles orchestration, JSON,
+concurrency, and packaging.
 
 ## Install
 
 ```sh
-curl -fsSL https://git.wearmed.xyz/suraj/vur/raw/branch/main/install.sh | bash
+curl -fsSL https://git.wearmed.xyz/suraj/vpa/raw/branch/main/install.sh | bash
 ```
 
 Checks you're on Void, installs `go`/`git`/`curl`/`fakeroot` if missing,
@@ -21,77 +25,89 @@ builds a static binary, and symlinks it into `~/.local/bin` (`--system` for
 
 ## Usage
 
+Every operation is reachable three ways — the full name, a short alias, or
+pacman syntax:
+
 ```
-vur search  (s)  <term>            search the AUR
-vur info         <pkg>             show AUR package details
-vur install (i)  <pkg> [pkg..]     build and install package(s)
-vur remove  (rm) <pkg> [pkg..]     remove package(s)
-vur update  (up)                   system upgrade + rebuild outdated AUR packages
-vur upgrade (su)                   update vur itself (git pull + rebuild)
-vur clean   (cl)                   wipe the build cache and local package repo
-vur list    (ls)                   list packages vur has installed
-vur help    (h, ?)                 show usage
+vpa search  (s)  <term>      -Ss     search
+vpa info         <pkg>       -Si     package details
+vpa install (i)  <pkg>...    -S      install
+vpa remove  (rm) <pkg>...    -R      remove
+vpa update  (up)             -Syu    update everything
+vpa list    (ls)             -Q      list installed
+vpa clean   (cl)             -Sc     clean caches
+vpa help    (h, ?)                   show usage
 ```
 
-`vur`, `vur help`, `vur h` and `vur ?` all show the general help. Each
-subcommand has its own usage text too — `vur help install`, `vur install
---help`, or just `vur install` with no arguments will show it.
+`vpa`, `vpa help`, `vpa h` and `vpa ?` all show the general help. Every
+subcommand has its own usage text too — `vpa help install`, `vpa install
+--help`, or just `vpa install` with no arguments.
 
-Note the two similarly-named commands: **`update`** updates your installed
-*packages*, **`upgrade`** updates *vur itself*.
+### What `vpa install` accepts
 
-Flags (anywhere on the command line): `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
+- a package already in Void's repos → installs it directly, no AUR involved
+- an AUR package name → reviews the PKGBUILD, builds it, installs it
+- a search term with no exact match → numbered picker (`1 3 5-7`)
+- a `.xbps` file or URL → installs it directly
+- a `.deb`/`.rpm`/`.pkg.tar.zst` file or URL → extracts and repackages it as
+  a real `.xbps` (packaging only — it can't fix ABI differences between
+  distros, so whether a foreign binary actually runs depends on how
+  compatible it happens to be with Void's glibc)
+
+### `vpa update`
+
+Updates everything in one go: vpa itself (if a newer version exists), a full
+system upgrade, then any AUR package vpa tracks. `-Syu` does the same.
+
+### Flags
+
+Anywhere on the command line: `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
 `--edit` (open PKGBUILD in `$EDITOR` first), `--devel` (also rebuild `-git`
-packages on `upgrade` when upstream moved but `pkgver` didn't), `--parallel=<N>`
-(concurrent source downloads per package, default 4). All persist in
-`~/.config/vur/vur.conf` (`PARALLEL_DOWNLOADS=N` for the last one).
+packages when upstream moved but `pkgver` didn't), `--parallel=<N>`
+(concurrent source downloads, default 4). All persist in
+`~/.config/vpa/vpa.conf` (`PARALLEL_DOWNLOADS=N` for the last one).
 
-`vur install <term>` with no exact match opens a numbered picker over the
-search results (e.g. `1 3 5-7`), most popular result gets the highest number.
+### More pacman syntax
 
-`vur install` also accepts a path or URL to a prebuilt Arch (`.pkg.tar.zst`),
-Debian (`.deb`), or RPM (`.rpm`) package directly — it extracts the payload
-and repackages it as a real `.xbps`. This only handles the packaging side;
-it can't fix ABI differences between distros, so whether the binary actually
-runs depends on how compatible it happens to be with Void's glibc. A plain
-`.xbps` file/URL, or a name that's already in Void's own repos, skips all of
-that and installs directly — no PKGBUILD, no AUR involved.
+`-Sy` refresh · `-Su` upgrade · `-Syu`/`-Syyu` both · `-Scc` deep clean ·
+`-Rs` remove + unneeded deps · `-U <file>` install a file · `-Qi` info ·
+`-Qs` search installed · `-Ql` a package's files · `-Qo` who owns a file ·
+`-Qe` explicitly installed · `-Qdt` orphans
 
 ```sh
-vur i pipes.sh
-vur i -y --edit somefuzzyterm
-vur i ./something.deb
-vur i ./something.xbps
-vur i firefox            # already in Void's repos -> installs directly
-vur update --devel       # update installed packages
-vur upgrade              # update vur itself
-vur rm pipes.sh
+vpa i firefox              # straight from Void's repos
+vpa i pipes.sh             # from the AUR
+vpa i ./something.deb      # repackaged as .xbps
+vpa -Syu                   # update everything
+vpa -Qo /usr/bin/brave-origin
 ```
 
 ## How it works
 
-1. Resolves the package's `PackageBase` via the AUR RPC and clones its git repo.
-2. Shows the full `PKGBUILD` (diffed against the last reviewed copy if
-   unchanged) and asks for confirmation before ever sourcing it — same trust
+For a Void repo package or a `.xbps` file, vpa just drives `xbps` directly.
+For an AUR package:
+
+1. Resolves the `PackageBase` via the AUR RPC and clones its git repo.
+2. Shows the full `PKGBUILD` (diffed against the last reviewed copy if it
+   changed) and asks for confirmation before ever sourcing it — same trust
    model as yay/paru/pikaur. `--edit` lets you change it first.
-3. Resolves `depends`/`makedepends` against Void's xbps repos, using
-   `depmap.conf` to bridge Arch/Void naming drift (e.g. `gtk2` → `gtk+`).
-   If a dependency has no Void package by that name, before giving up vur
-   checks what shared libraries the real Arch package ships (via Arch's
-   package database) against what Void packages actually provide (e.g.
-   Arch's `libxss` → Void's `libXScrnSaver`, both shipping `libXss.so.1`)
-   — matching on real ABI instead of guessing from spelling. Anything still
-   unresolved and AUR-only gets built recursively, with cycle detection.
+3. Resolves `depends`/`makedepends` against Void's repos, using `depmap.conf`
+   to bridge Arch/Void naming drift (e.g. `gtk2` → `gtk+`). If a dependency
+   has no Void package by that name, before giving up vpa checks what shared
+   libraries the real Arch package ships against what Void packages actually
+   provide (e.g. Arch's `libxss` → Void's `libXScrnSaver`, both shipping
+   `libXss.so.1`) — matching on real ABI instead of guessing from spelling.
+   Anything still unresolved and AUR-only gets built recursively, with cycle
+   detection.
 4. Downloads sources (concurrently, cached by checksum so rebuilds skip
    unchanged ones), verifies checksums, extracts archives.
 5. Runs `build()` as your user (with `MAKEFLAGS`/`CARGO_BUILD_JOBS` set to
    your core count), `package()` under `fakeroot`.
-6. Packages with `xbps-create`, indexes into `~/.cache/vur/repo`, installs
+6. Packages with `xbps-create`, indexes into `~/.cache/vpa/repo`, installs
    via `xbps-install --repository=...` — no system config touched. Multiple
    packages build tier-by-tier: independent packages in a tier build in
-   parallel, and each tier gets installed before the next tier's builds
-   start, so a package needing an earlier AUR dependency at build time
-   finds it actually present.
+   parallel, and each tier is installed before the next tier's builds start,
+   so a package needing an earlier AUR dependency at build time finds it.
 
 ## Known limitations
 
@@ -99,19 +115,28 @@ vur rm pipes.sh
 - `.install` scriptlets are shown for review but not converted to xbps hooks.
 - No systemd-only dependency substitutes — Void has none, so `depmap.conf`
   marks them unresolvable rather than guessing.
-- `-git` packages: `upgrade --devel` catches upstream commits moving, but a
+- `-git` packages: `update --devel` catches upstream commits moving, but a
   PKGBUILD's dynamic `pkgver()` is never invoked, so the version string can lag.
-- Imported Arch/`.deb`/RPM packages carry no real dependency information —
-  their declared deps are just printed as a warning, not installed.
+- Imported `.deb`/RPM/Arch packages carry no usable dependency information —
+  their declared deps are printed as a warning, not installed.
 - Shared-library dependency matching only works for actual libraries —
-  virtual/meta dependency names with no `.so` file (e.g. `ttf-font`) can't
-  be matched this way and stay unresolved.
+  virtual/meta names with no `.so` file (e.g. `ttf-font`) stay unresolved.
+- `-Syy` isn't more forceful than `-Sy` (xbps always re-fetches repodata),
+  and pacman's `-Rn` has no xbps equivalent (xbps deliberately preserves
+  modified config files) — vpa warns rather than pretending otherwise.
 
 ## Credits
 
-The whole project was inspired by [yay](https://github.com/Jguer/yay).
-vur is basically trying to replicate it for Void Linux, rather than Arch.
+The AUR-facing parts of vpa were inspired by [yay](https://github.com/Jguer/yay)
+— the numbered install picker, reviewing a PKGBUILD before building it,
+`--devel` rebuilds. Inspiration only: no yay code was copied or adapted, and
+none of vpa's other functionality derives from it. The command structure
+takes cues from [vpm](https://github.com/netzverweigerer/vpm).
 
 ## License
 
 GPLv3, see [LICENSE](LICENSE).
+
+---
+
+And yes, I used Claude to write this README. I wasn't about to type all that.

@@ -1,8 +1,9 @@
-// Package config resolves vur's on-disk paths and loads its config file.
+// Package config resolves vpa's on-disk paths and loads its config file.
 package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -32,18 +33,26 @@ const (
 	AURGit = "https://aur.archlinux.org"
 )
 
-// Load resolves all paths and reads ~/.config/vur/vur.conf if present.
+// Load resolves all paths and reads ~/.config/vpa/vpa.conf if present.
 func Load() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
 
-	cacheDir := os.Getenv("VUR_CACHE")
+	cacheDir := os.Getenv("VPA_CACHE")
 	if cacheDir == "" {
-		cacheDir = filepath.Join(home, ".cache", "vur")
+		cacheDir = filepath.Join(home, ".cache", "vpa")
 	}
-	configDir := filepath.Join(home, ".config", "vur")
+	configDir := filepath.Join(home, ".config", "vpa")
+
+	// The project was renamed from vur to vpa; carry an existing install's
+	// state (tracked packages, source cache, config) across on first run so
+	// the rename isn't a silent data loss. Safe to delete once nobody's
+	// running a pre-rename version anymore.
+	migrateLegacyDir(filepath.Join(home, ".cache", "vur"), cacheDir)
+	migrateLegacyDir(filepath.Join(home, ".config", "vur"), configDir)
+	migrateLegacyFile(filepath.Join(configDir, "vur.conf"), filepath.Join(configDir, "vpa.conf"))
 
 	c := &Config{
 		CacheDir:     cacheDir,
@@ -52,7 +61,7 @@ func Load() (*Config, error) {
 		ManifestFile: filepath.Join(cacheDir, "installed.json"),
 		ReviewedDir:  filepath.Join(cacheDir, "reviewed"),
 		ConfigDir:    configDir,
-		ConfigFile:   filepath.Join(configDir, "vur.conf"),
+		ConfigFile:   filepath.Join(configDir, "vpa.conf"),
 		UserDepmap:   filepath.Join(configDir, "depmap.conf"),
 		Editor:       firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"), "vi"),
 		Parallel:     4,
@@ -121,4 +130,39 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// migrateLegacyDir moves an old vur-era directory to its vpa location, but
+// only when the old one exists and the new one doesn't -- so it never
+// clobbers real vpa state, and does nothing at all on a fresh install or
+// on every run after the first.
+func migrateLegacyDir(old, new string) {
+	if old == new {
+		return
+	}
+	if _, err := os.Stat(new); err == nil {
+		return
+	}
+	if fi, err := os.Stat(old); err != nil || !fi.IsDir() {
+		return
+	}
+	os.MkdirAll(filepath.Dir(new), 0o755)
+	if err := os.Rename(old, new); err == nil {
+		fmt.Fprintf(os.Stderr, ":: migrated %s -> %s (project renamed vur -> vpa)\n", old, new)
+	}
+}
+
+func migrateLegacyFile(old, new string) {
+	if old == new {
+		return
+	}
+	if _, err := os.Stat(new); err == nil {
+		return
+	}
+	if fi, err := os.Stat(old); err != nil || fi.IsDir() {
+		return
+	}
+	if err := os.Rename(old, new); err == nil {
+		fmt.Fprintf(os.Stderr, ":: migrated %s -> %s (project renamed vur -> vpa)\n", old, new)
+	}
 }

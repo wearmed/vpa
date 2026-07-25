@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vur/internal/pkgbuild"
-	"vur/internal/sysutil"
-	"vur/internal/systemdcheck"
-	"vur/internal/ui"
+	"vpa/internal/pkgbuild"
+	"vpa/internal/sysutil"
+	"vpa/internal/systemdcheck"
+	"vpa/internal/ui"
 )
 
 // reviewAndLoad is the single enforcement point for "show + confirm before

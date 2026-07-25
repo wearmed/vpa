@@ -1,4 +1,4 @@
-// Package gitutil wraps the small set of git operations vur needs.
+// Package gitutil wraps the small set of git operations vpa needs.
 package gitutil
 
 import (
@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vur/internal/config"
-	"vur/internal/ui"
+	"vpa/internal/config"
+	"vpa/internal/ui"
 )
 
 // CloneAUR clones (or updates) an AUR package base's git repo into dest.

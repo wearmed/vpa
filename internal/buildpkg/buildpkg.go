@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"vur/internal/gitutil"
-	"vur/internal/pkgbuild"
-	"vur/internal/sysutil"
-	"vur/internal/ui"
+	"vpa/internal/gitutil"
+	"vpa/internal/pkgbuild"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
 )
 
 //go:embed driver-build.sh
@@ -386,7 +386,7 @@ func extractZip(src, destDir string) error {
 // injection-safety approach of the original bash implementation. prefix, if
 // given, wraps the invocation (e.g. []string{"fakeroot", "--"}).
 func runDriver(script []byte, env []string, prefix ...string) error {
-	tmp, err := os.CreateTemp("", "vur-driver-*.sh")
+	tmp, err := os.CreateTemp("", "vpa-driver-*.sh")
 	if err != nil {
 		return err
 	}

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"vur/internal/aurapi"
-	"vur/internal/ui"
+	"vpa/internal/aurapi"
+	"vpa/internal/ui"
 )
 
 var rangeRe = regexp.MustCompile(`^([0-9]+)-([0-9]+)$`)

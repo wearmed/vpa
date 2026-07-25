@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"vur/internal/sysutil"
+	"vpa/internal/sysutil"
 )
 
 type Format int
@@ -68,7 +68,7 @@ func Fetch(pathOrURL string) (path string, cleanup func(), err error) {
 		return pathOrURL, func() {}, nil
 	}
 
-	tmp, err := os.CreateTemp("", "vur-foreign-*"+filepath.Ext(pathOrURL))
+	tmp, err := os.CreateTemp("", "vpa-foreign-*"+filepath.Ext(pathOrURL))
 	if err != nil {
 		return "", func() {}, err
 	}
@@ -165,7 +165,7 @@ func extractArch(file, pkgdir string) (Meta, error) {
 }
 
 func extractDebian(file, pkgdir string) (Meta, error) {
-	staging, err := os.MkdirTemp("", "vur-deb-*")
+	staging, err := os.MkdirTemp("", "vpa-deb-*")
 	if err != nil {
 		return Meta{}, err
 	}

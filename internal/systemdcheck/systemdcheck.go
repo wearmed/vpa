@@ -8,7 +8,7 @@ import (
 	"os"
 	"regexp"
 
-	"vur/internal/ui"
+	"vpa/internal/ui"
 )
 
 var forcingFlags = regexp.MustCompile(

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"vur/internal/gitutil"
-	"vur/internal/xbpsutil"
+	"vpa/internal/gitutil"
+	"vpa/internal/xbpsutil"
 )
 
 var (
@@ -63,7 +63,7 @@ func Load(dir string) (*PKGBUILD, error) {
 		return nil, fmt.Errorf("no PKGBUILD found in %s", dir)
 	}
 
-	tmp, err := os.CreateTemp("", "vur-extract-*.sh")
+	tmp, err := os.CreateTemp("", "vpa-extract-*.sh")
 	if err != nil {
 		return nil, err
 	}

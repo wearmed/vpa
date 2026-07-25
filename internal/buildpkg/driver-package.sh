@@ -11,6 +11,6 @@ if declare -f "$fn" >/dev/null; then
 elif declare -f package >/dev/null; then
   package
 else
-  echo "vur: no package() or ${fn}() found in PKGBUILD" >&2
+  echo "vpa: no package() or ${fn}() found in PKGBUILD" >&2
   exit 1
 fi

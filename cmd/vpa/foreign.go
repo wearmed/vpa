@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"vur/internal/foreignpkg"
-	"vur/internal/manifest"
-	"vur/internal/sysutil"
-	"vur/internal/ui"
-	"vur/internal/xbpsutil"
+	"vpa/internal/foreignpkg"
+	"vpa/internal/manifest"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
+	"vpa/internal/xbpsutil"
 )
 
 // isForeignPkgArg reports whether an install argument names a foreign
@@ -51,7 +51,7 @@ func (a *App) installForeign(pathOrURL string) error {
 		ui.Info("  %s", meta.Desc)
 	}
 	if len(meta.Depends) > 0 {
-		ui.Warn("this %s package declares dependencies vur can't map to Void package names -- you may need to install these yourself if things don't work: %s", formatName(format), strings.Join(meta.Depends, ", "))
+		ui.Warn("this %s package declares dependencies vpa can't map to Void package names -- you may need to install these yourself if things don't work: %s", formatName(format), strings.Join(meta.Depends, ", "))
 	}
 	ui.Warn("this is a foreign binary repackaged as-is -- it was built for %s, not Void, so it may not run correctly even though both are glibc-based", formatName(format))
 

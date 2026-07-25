@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"vur/internal/config"
+	"vpa/internal/config"
 )
 
 type Package struct {

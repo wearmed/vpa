@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
-	"vur/internal/aurapi"
-	"vur/internal/buildpkg"
-	"vur/internal/config"
-	"vur/internal/deps"
-	"vur/internal/gitutil"
-	"vur/internal/manifest"
-	"vur/internal/pkgbuild"
-	"vur/internal/sysutil"
-	"vur/internal/ui"
-	"vur/internal/xbpsutil"
+	"vpa/internal/aurapi"
+	"vpa/internal/buildpkg"
+	"vpa/internal/config"
+	"vpa/internal/deps"
+	"vpa/internal/gitutil"
+	"vpa/internal/manifest"
+	"vpa/internal/pkgbuild"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
+	"vpa/internal/xbpsutil"
 )
 
 type App struct {
@@ -31,7 +31,7 @@ func (a *App) gitDir(pkgbase string) string {
 
 func (a *App) cmdSearch(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: vur search <term>")
+		return fmt.Errorf("usage: vpa search <term>")
 	}
 	pkgs, err := aurapi.Search(args[0])
 	if err != nil {
@@ -51,7 +51,7 @@ func (a *App) cmdSearch(args []string) error {
 
 func (a *App) cmdInfo(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: vur info <pkg>")
+		return fmt.Errorf("usage: vpa info <pkg>")
 	}
 	pkgs, err := aurapi.Info(args[0])
 	if err != nil {
@@ -87,7 +87,7 @@ func orDash(s string) string {
 
 func (a *App) cmdInstall(pkgs []string) error {
 	if len(pkgs) == 0 {
-		return fmt.Errorf("usage: vur install <pkg> [pkg...]")
+		return fmt.Errorf("usage: vpa install <pkg> [pkg...]")
 	}
 
 	var xbpsFileArgs, foreignArgs, voidArgs, aurArgs []string
@@ -301,7 +301,7 @@ func (a *App) cmdInstall(pkgs []string) error {
 
 func (a *App) cmdRemove(pkgs []string) error {
 	if len(pkgs) == 0 {
-		return fmt.Errorf("usage: vur remove <pkg> [pkg...]")
+		return fmt.Errorf("usage: vpa remove <pkg> [pkg...]")
 	}
 	if err := xbpsutil.Remove(pkgs...); err != nil {
 		return err
@@ -313,8 +313,8 @@ func (a *App) cmdRemove(pkgs []string) error {
 	return nil
 }
 
-// forgetRemoved drops packages from vur's manifest after they've been
-// removed from the system, so `vur list`/`vur update` stop tracking them.
+// forgetRemoved drops packages from vpa's manifest after they've been
+// removed from the system, so `vpa list`/`vpa update` stop tracking them.
 func (a *App) forgetRemoved(pkgs []string) error {
 	m, err := manifest.Load(a.Cfg.ManifestFile)
 	if err != nil {
@@ -327,12 +327,12 @@ func (a *App) forgetRemoved(pkgs []string) error {
 }
 
 func (a *App) cmdUpdate() error {
-	// vur updates itself as part of a normal update run -- it's just another
-	// thing on the system that gets out of date, and a stale vur silently
+	// vpa updates itself as part of a normal update run -- it's just another
+	// thing on the system that gets out of date, and a stale vpa silently
 	// missing fixes is exactly the failure mode worth avoiding. Non-fatal:
 	// a self-update problem shouldn't block updating actual packages.
 	if err := selfUpdateIfAvailable(); err != nil {
-		ui.Warn("couldn't update vur itself: %v", err)
+		ui.Warn("couldn't update vpa itself: %v", err)
 	}
 
 	if ui.Confirm("Run a full system upgrade first (sudo xbps-install -Su)?") {
@@ -354,7 +354,7 @@ func (a *App) cmdUpdate() error {
 		return err
 	}
 	if m.Empty() {
-		ui.Info("nothing tracked by vur yet")
+		ui.Info("nothing tracked by vpa yet")
 		return nil
 	}
 
@@ -442,7 +442,7 @@ func (a *App) cmdList() error {
 		return err
 	}
 	if m.Empty() {
-		ui.Info("nothing tracked by vur")
+		ui.Info("nothing tracked by vpa")
 		return nil
 	}
 	names := make([]string, 0, len(m.Entries))

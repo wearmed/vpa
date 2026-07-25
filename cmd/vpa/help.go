@@ -32,21 +32,21 @@ func canonicalCommand(name string) string {
 }
 
 var commandHelp = map[string]string{
-	"search": `vur search (s) <term>
+	"search": `vpa search (s) <term>
 
 Search the AUR by package name and description.
 
 Example:
-  vur search pipes
+  vpa search pipes
 `,
-	"info": `vur info <pkg>
+	"info": `vpa info <pkg>
 
 Show full AUR package details for an exact package name.
 
 Example:
-  vur info pipes.sh
+  vpa info pipes.sh
 `,
-	"install": `vur install (i) <pkg> [pkg...]
+	"install": `vpa install (i) <pkg> [pkg...]
 
 Build and install package(s). Each argument can be:
   - an exact AUR package name
@@ -57,42 +57,42 @@ Build and install package(s). Each argument can be:
 Relevant flags: --edit, --parallel=<N>, --noconfirm/-y
 
 Examples:
-  vur install pipes.sh
-  vur i -y --edit somefuzzyterm
-  vur i ./something.deb
-  vur i ./something.xbps
+  vpa install pipes.sh
+  vpa i -y --edit somefuzzyterm
+  vpa i ./something.deb
+  vpa i ./something.xbps
 `,
-	"remove": `vur remove (rm) <pkg> [pkg...]
+	"remove": `vpa remove (rm) <pkg> [pkg...]
 
 Remove installed package(s), via xbps-remove.
 
 Example:
-  vur remove pipes.sh
+  vpa remove pipes.sh
 `,
-	"update": `vur update (up, upgrade, su)
+	"update": `vpa update (up, upgrade, su)
 
 Update everything:
-  1. vur itself, if a newer version is available (silent if current)
+  1. vpa itself, if a newer version is available (silent if current)
   2. a full system upgrade (sudo xbps-install -Su)
-  3. any vur-tracked AUR package with a newer version
+  3. any vpa-tracked AUR package with a newer version
 
 Relevant flags: --devel (also rebuild -git/-svn/-hg packages if
 upstream moved past pkgver even though the version string didn't
 change), --noconfirm/-y
 
 Examples:
-  vur update
-  vur update --devel
-  vur -Syu
+  vpa update
+  vpa update --devel
+  vpa -Syu
 `,
-	"clean": `vur clean (cl)
+	"clean": `vpa clean (cl)
 
 Wipe the build cache, and optionally the local package repo (you'll
 be asked before that part happens).
 `,
-	"list": `vur list (ls)
+	"list": `vpa list (ls)
 
-List packages vur has installed, with version, and whether it's a
+List packages vpa has installed, with version, and whether it's a
 tracked -git/-svn/-hg devel package.
 `,
 }

@@ -1,11 +1,11 @@
-// Package sysutil provides small OS-level helpers shared across vur.
+// Package sysutil provides small OS-level helpers shared across vpa.
 package sysutil
 
 import (
 	"os"
 	"os/exec"
 
-	"vur/internal/ui"
+	"vpa/internal/ui"
 )
 
 // RequireBin aborts unless bin is on PATH, offering to install pkg via xbps first.

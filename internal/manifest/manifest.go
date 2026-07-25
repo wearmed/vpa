@@ -1,4 +1,4 @@
-// Package manifest tracks packages vur has installed, as JSON.
+// Package manifest tracks packages vpa has installed, as JSON.
 package manifest
 
 import (

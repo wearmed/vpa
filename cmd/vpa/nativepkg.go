@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vur/internal/foreignpkg"
-	"vur/internal/sysutil"
-	"vur/internal/ui"
-	"vur/internal/xbpsutil"
+	"vpa/internal/foreignpkg"
+	"vpa/internal/sysutil"
+	"vpa/internal/ui"
+	"vpa/internal/xbpsutil"
 )
 
 // isXbpsFileArg reports whether an install argument names a raw .xbps
@@ -21,7 +21,7 @@ func isXbpsFileArg(arg string) bool {
 
 // installXbpsFile installs a standalone .xbps file (local path or URL)
 // directly: xbps-install only takes package names resolved against a repo,
-// not a bare file path, so this indexes the file into vur's own local repo
+// not a bare file path, so this indexes the file into vpa's own local repo
 // (the same mechanism used for its own AUR builds) and installs it by the
 // name recovered from the file itself.
 func (a *App) installXbpsFile(pathOrURL string) error {
@@ -97,7 +97,7 @@ func copyToRepo(src, dst string) error {
 
 // installVoidRepo installs package names that are already resolvable from
 // Void's own configured repos (or already installed) -- no PKGBUILD, no
-// AUR involved at all, so none of vur's review/confirm ceremony applies;
+// AUR involved at all, so none of vpa's review/confirm ceremony applies;
 // xbps-install's own native prompt (unless --noconfirm) is the only
 // confirmation needed, same trust level as running it directly yourself.
 func (a *App) installVoidRepo(names []string) error {
