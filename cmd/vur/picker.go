@@ -51,10 +51,14 @@ func interactiveSelectPkg(term string) ([]string, error) {
 		if m := rangeRe.FindStringSubmatch(tok); m != nil {
 			lo, _ := strconv.Atoi(m[1])
 			hi, _ := strconv.Atoi(m[2])
+			if lo < 1 {
+				lo = 1
+			}
+			if hi > n {
+				hi = n // a typo'd huge upper bound (e.g. "1-999999999") shouldn't spin needlessly
+			}
 			for j := lo; j <= hi; j++ {
-				if j >= 1 && j <= n {
-					sel = append(sel, pkgs[j-1].Name)
-				}
+				sel = append(sel, pkgs[j-1].Name)
 			}
 			continue
 		}

@@ -117,9 +117,16 @@ func (a *App) cmdInstall(pkgs []string) error {
 	}
 
 	var bases []string
+	seenBase := make(map[string]bool)
+	addBase := func(base string) {
+		if !seenBase[base] {
+			seenBase[base] = true
+			bases = append(bases, base)
+		}
+	}
 	for _, name := range aurArgs {
 		if p, ok := aurapi.ByName(infos, name); ok {
-			bases = append(bases, p.PackageBase)
+			addBase(p.PackageBase)
 			continue
 		}
 		picked, err := interactiveSelectPkg(name)
@@ -134,7 +141,7 @@ func (a *App) cmdInstall(pkgs []string) error {
 			if err != nil || base == "" {
 				return fmt.Errorf("'%s' not found in AUR", pname)
 			}
-			bases = append(bases, base)
+			addBase(base)
 		}
 	}
 
@@ -297,7 +304,15 @@ func (a *App) cmdRemove(pkgs []string) error {
 
 func (a *App) cmdUpgrade() error {
 	if ui.Confirm("Run a full system upgrade first (sudo xbps-install -Su)?") {
-		if err := sysutil.RunInteractive("sudo", "xbps-install", "-Su"); err != nil {
+		// -y here too: with --noconfirm, xbps-install's own nested confirmation
+		// prompt would otherwise still block waiting for interactive input
+		// (or silently abort on a non-tty stdin), defeating the point of
+		// --noconfirm entirely.
+		args := []string{"xbps-install", "-Su"}
+		if ui.NoConfirm {
+			args = append(args, "-y")
+		}
+		if err := sysutil.RunInteractive("sudo", args...); err != nil {
 			ui.Warn("system upgrade failed or was declined by xbps; continuing to AUR packages")
 		}
 	}

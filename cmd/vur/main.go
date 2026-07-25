@@ -60,11 +60,13 @@ func usage() {
 }
 
 func helpPager() {
-	pager := os.Getenv("PAGER")
-	if pager == "" {
-		pager = "less"
+	// $PAGER commonly carries arguments (e.g. "less -R"); treating the whole
+	// string as one literal binary name would fail to even start.
+	fields := strings.Fields(os.Getenv("PAGER"))
+	if len(fields) == 0 {
+		fields = []string{"less"}
 	}
-	cmd := exec.Command(pager)
+	cmd := exec.Command(fields[0], fields[1:]...)
 	cmd.Stdin = strings.NewReader(usageText())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

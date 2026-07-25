@@ -74,12 +74,28 @@ func FetchSources(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, parallel int, c
 	os.MkdirAll(sourceCache, 0o755)
 
 	// Check build-time deps once upfront rather than racing RequireBin's
-	// confirm-and-install prompt across goroutines.
+	// confirm-and-install prompt (which reads a line from stdin) across
+	// concurrent goroutines below.
 	for _, entry := range pb.Source {
-		_, url := pkgbuild.SplitSourceEntry(entry)
+		fname, url := pkgbuild.SplitSourceEntry(entry)
 		if strings.HasPrefix(url, "git+") {
 			sysutil.RequireBin("git", "git")
 		}
+		if strings.HasSuffix(fname, ".zip") {
+			sysutil.RequireBin("unzip", "unzip")
+		}
+	}
+	if anyNonSkip(pb.Sha512sums) {
+		sysutil.RequireBin("sha512sum", "coreutils")
+	}
+	if anyNonSkip(pb.Sha256sums) {
+		sysutil.RequireBin("sha256sum", "coreutils")
+	}
+	if anyNonSkip(pb.B2sums) {
+		sysutil.RequireBin("b2sum", "coreutils")
+	}
+	if anyNonSkip(pb.Md5sums) {
+		sysutil.RequireBin("md5sum", "coreutils")
 	}
 
 	sem := make(chan struct{}, parallel)
@@ -282,6 +298,15 @@ func verifyChecksum(pb *pkgbuild.PKGBUILD, i int, fname, dir string) error {
 	}
 	ui.Warn("%s: no checksum available to verify (all SKIP/missing) -- trusting download as-is", fname)
 	return nil
+}
+
+func anyNonSkip(sums []string) bool {
+	for _, s := range sums {
+		if s != "" && s != "SKIP" {
+			return true
+		}
+	}
+	return false
 }
 
 func isNoExtract(pb *pkgbuild.PKGBUILD, fname string) bool {

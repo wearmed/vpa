@@ -100,6 +100,10 @@ func Fetch(pathOrURL string) (path string, cleanup func(), err error) {
 // metadata fallback if used instead.
 func Extract(format Format, file, originalName, pkgdir string) (Meta, error) {
 	sysutil.RequireBin("bsdtar", "bsdtar")
+	// A stale pkgdir from a previous (failed, or different-version) import
+	// of the same package would otherwise get overlaid rather than replaced,
+	// silently shipping leftover files the new package doesn't actually have.
+	os.RemoveAll(pkgdir)
 	if err := os.MkdirAll(pkgdir, 0o755); err != nil {
 		return Meta{}, err
 	}

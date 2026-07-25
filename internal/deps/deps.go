@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"vur/internal/aurapi"
 	"vur/internal/pkgbuild"
@@ -35,18 +36,26 @@ type Classification struct {
 	AURBase      string
 }
 
-var depmap map[string]string
+var (
+	depmap     map[string]string
+	depmapOnce sync.Once
+)
 
 // loadDepmap parses defaultDepmap first, then userDepmapPath if present, so
 // user entries win and the last line for a name in either file wins --
 // matching the old bash version's "check user file first" semantics via a
-// single merged map instead of grepping files on every lookup.
+// single merged map instead of grepping files on every lookup. Guarded by
+// sync.Once: Classify (its only caller, via DepmapLookup) isn't currently
+// invoked concurrently anywhere, but a bare nil-check-then-init race is a
+// trivial footgun to leave lying around for whenever that changes.
 func loadDepmap(userDepmapPath string) {
-	depmap = make(map[string]string)
-	parseInto(depmap, defaultDepmap)
-	if data, err := os.ReadFile(userDepmapPath); err == nil {
-		parseInto(depmap, data)
-	}
+	depmapOnce.Do(func() {
+		depmap = make(map[string]string)
+		parseInto(depmap, defaultDepmap)
+		if data, err := os.ReadFile(userDepmapPath); err == nil {
+			parseInto(depmap, data)
+		}
+	})
 }
 
 func parseInto(m map[string]string, data []byte) {
@@ -67,9 +76,10 @@ func parseInto(m map[string]string, data []byte) {
 // DepmapLookup returns the mapped Void name, the original if unmapped, or
 // "-" if explicitly marked as having no Void equivalent.
 func DepmapLookup(userDepmapPath, name string) string {
-	if depmap == nil {
-		loadDepmap(userDepmapPath)
-	}
+	// sync.Once inside loadDepmap makes this safe to call unconditionally
+	// even if Classify is ever called concurrently: every caller is
+	// guaranteed to see the fully-populated map once this returns.
+	loadDepmap(userDepmapPath)
 	if v, ok := depmap[name]; ok {
 		return v
 	}

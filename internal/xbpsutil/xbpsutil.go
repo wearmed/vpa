@@ -133,15 +133,21 @@ func Install(repoDir, cacheDir string, pkgs ...string) error {
 	if len(pkgs) == 0 {
 		return nil
 	}
+	sync := needsSync(cacheDir)
 	args := []string{"xbps-install", "--repository=" + repoDir}
-	if needsSync(cacheDir) {
+	if sync {
 		args = append(args, "-S")
-		markSynced(cacheDir)
 	}
 	args = append(args, "-y")
 	args = append(args, pkgs...)
 	if err := sysutil.RunInteractive("sudo", args...); err != nil {
 		return fmt.Errorf("xbps-install failed for: %s", strings.Join(pkgs, " "))
+	}
+	// Only recorded on success: if the sync itself failed (network down,
+	// etc.), the next call should retry rather than skip syncing for the
+	// next repoSyncInterval on the strength of a sync that never happened.
+	if sync {
+		markSynced(cacheDir)
 	}
 	return nil
 }

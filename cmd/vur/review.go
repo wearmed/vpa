@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"vur/internal/pkgbuild"
 	"vur/internal/sysutil"
@@ -48,7 +50,15 @@ func (a *App) reviewAndLoad(pkgbase, dir string) (*pkgbuild.PKGBUILD, error) {
 
 	if a.Cfg.EditPKGBUILD {
 		if ui.Confirm("Open PKGBUILD for %s in %s before building?", pkgbase, a.Cfg.Editor) {
-			if err := sysutil.RunInteractive(a.Cfg.Editor, pkgbuildPath); err != nil {
+			// $EDITOR/$VISUAL commonly carry arguments (e.g. "code --wait",
+			// "vim -u NONE") -- treating the whole string as one literal
+			// binary name would fail to even start.
+			fields := strings.Fields(a.Cfg.Editor)
+			if len(fields) == 0 {
+				fields = []string{"vi"}
+			}
+			args := append(append([]string{}, fields[1:]...), pkgbuildPath)
+			if err := sysutil.RunInteractive(fields[0], args...); err != nil {
 				ui.Warn("editor exited with an error: %v", err)
 			}
 		}
@@ -70,6 +80,17 @@ func (a *App) reviewAndLoad(pkgbase, dir string) (*pkgbuild.PKGBUILD, error) {
 }
 
 func printDiff(oldFile, newFile string) {
-	out, _ := sysutil.Output("diff", "-u", "--", oldFile, newFile)
+	sysutil.RequireBin("diff", "diffutils")
+	out, err := sysutil.Output("diff", "-u", "--", oldFile, newFile)
+	// diff exits 1 to mean "files differ", which is the expected case here,
+	// not a real failure -- anything else (missing binary, permissions,
+	// exit 2) is worth telling the user about instead of silently printing
+	// nothing and letting them think there were no changes.
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+			ui.Warn("diff failed, showing no changes (this doesn't mean there weren't any): %v", err)
+			return
+		}
+	}
 	fmt.Println(out)
 }
