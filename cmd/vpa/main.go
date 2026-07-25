@@ -1,4 +1,11 @@
 // vpa -- Void Package Assistant: the only Void package manager you'll need.
+//
+// Copyright (C) 2026 suraj
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version. See the LICENSE file for details.
 package main
 
 import (
@@ -14,6 +21,32 @@ import (
 )
 
 func usageText() string {
+	return `vpa - Void Package Assistant
+the only Void package manager you'll need
+
+  vpa install <name>     install something
+  vpa remove  <name>     uninstall something
+  vpa search  <term>     find something to install
+  vpa info    <name>     what is this package?
+  vpa list               what do I have installed?
+  vpa update             update everything
+
+Getting started:
+
+  vpa search browser     see what's available
+  vpa install firefox    install it
+  vpa update             keep everything current
+
+vpa installs from Void's own repositories, the AUR, and .xbps/.deb/.rpm
+package files -- you don't have to know which is which, just name what
+you want.
+
+  vpa help <command>     how a specific command works
+  vpa help --all         every command vpa has
+`
+}
+
+func usageFullText() string {
 	xbpsVer, _ := sysutil.Output("xbps-query", "-V")
 	xbpsVer = strings.TrimSpace(xbpsVer)
 	if xbpsVer == "" {
@@ -24,61 +57,54 @@ the only Void package manager you'll need
 XBPS version: %s
 
 USAGE:
-vpa [OPTIONS] [SUBCOMMANDS] [<ARGS>]
+vpa [OPTIONS] <COMMAND> [ARGS]
+
+INSTALLING AND REMOVING:
+install (i) <pkg(s)>          - Install from Void's repos, the AUR, or a
+                                 .xbps/.deb/.rpm/.pkg.tar.zst file
+devinstall (di) <pkg(s)>      - Install packages plus their -devel parts
+forceinstall (fi) <pkg(s)>    - Reinstall, overwriting existing files
+remove (rm) <pkg(s)>          - Remove packages
+removerecursive (rr) <pkg(s)> - Remove packages and unneeded dependencies
+update (up, upgrade)          - Update vpa, your system, and AUR packages
+sync (sy)                     - Refresh repository data only
+
+FINDING THINGS:
+search (s) <term>             - Search Void's repos and the AUR
+info <pkg>                    - Show details for a package
+list (ls) [--aur]             - List installed packages
+filelist (fl) <pkg>           - List the files a package installs
+whatprovides (wp) <file>      - Show which package a file came from
+searchfile (sf) <file>        - Find installed packages containing a file
+deps <pkg>                    - Show what a package needs
+reverse (rv) <pkg>            - Show what depends on a package
+
+LOOKING AFTER YOUR SYSTEM:
+orphans                       - List no-longer-needed dependencies
+autoremove (ar)               - Remove those orphaned packages
+cleanup (cl)                  - Free up disk space
+reconfigure (rc) <pkg|all>    - Re-run a package's setup step
+hold [pkg(s)]                 - Stop packages being updated (or list held)
+unhold <pkg(s)>               - Allow held packages to update again
+
+REPOSITORIES AND ALTERNATIVES:
+listrepos (lr)                - Show configured repositories
+addrepo <url>                 - Add another repository
+listalternatives (la)         - Show configurable defaults
+setalternative (sa) <pkg>     - Choose which package provides one
+
+HELP:
+help (h, ?) [command]         - Show help, or help for one command
+helppager (hp)                - Show this, piped through $PAGER
 
 OPTIONS:
---color=<yes|no|auto>        - Enable/disable colorized output (default: auto)
---noconfirm, -y               - Never prompt for confirmation
---edit                         - Open each PKGBUILD in $EDITOR before building
---devel                        - Also rebuild -git/-svn/-hg packages on
-                                  update if upstream moved past pkgver
---parallel=<N>                - Concurrent source downloads per package
-                                  (default: 4)
---help                         - Show this message, or a subcommand's own
-                                  usage if one was given (e.g. vpa install --help)
-
-PACKAGES:
-search (s) <term>             - Search Void's repos and the AUR together
-info <pkg>                     - Show details from Void's repos and/or AUR
-install (i) <pkg(s)>           - Install from Void's repos, the AUR, or a
-                                  local/remote .xbps/.deb/.rpm/.pkg.tar.zst
-                                  file (no exact match opens a picker)
-remove (rm) <pkg(s)>            - Remove <package(s)>
-update (up, upgrade, su)       - Update everything: vpa itself, a full
-                                  system upgrade, then AUR packages
-list (ls) [--aur]              - List installed packages (--aur: only ones
-                                  vpa built from the AUR)
-
-QUERYING:
-files (fl) <pkg>              - List the files a package owns
-owns (wp) <file>               - Show which package owns a file
-deps <pkg>                     - Show a package's dependencies
-revdeps (rv) <pkg>             - Show what depends on a package
-orphans                         - List no-longer-needed dependencies
-repos (lr)                     - List configured repositories
-
-MAINTENANCE:
-autoremove (ar)               - Remove orphaned packages
-reconfigure (rc) <pkg|all>     - Re-run a package's configuration step
-hold [pkg(s)]                  - Hold packages back from updates (or list)
-unhold <pkg(s)>                - Release held packages
-clean (cl)                     - Wipe build/package caches
-
-help (h, ?)                    - Show this message, or run 'vpa help <cmd>'
-                                  for a subcommand's own usage
-helppager (hp)                 - Show usage information (piped to $PAGER)
-
-PACMAN-STYLE FLAGS:
-Also accepts pacman's own syntax, with pacman's semantics:
--S <pkg>      install          -Ss <term>    search
--Sy           refresh repos    -Si <pkg>     package info
--Su           upgrade          -Sc / -Scc    clean package cache
--Syu / -Syyu  refresh+upgrade  -U <file>     install a local package file
--R <pkg>      remove           -Rs <pkg>     remove + unneeded deps
--Q            list installed   -Qi <pkg>     installed package info
--Qs <term>    search installed -Ql <pkg>     list a package's files
--Qe           explicitly installed          -Qo <file>  which package owns file
--Qdt          orphans
+--noconfirm, -y               - Don't ask for confirmation
+--edit                        - Edit an AUR build script before building
+--devel                       - Also rebuild -git packages whose upstream
+                                 code changed
+--parallel=<N>                - Concurrent downloads (default: 4)
+--color=<yes|no|auto>         - Colored output (default: auto)
+--help                        - Show help, or a command's own help
 
 CONFIG FILE:
 ~/.config/vpa/vpa.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
@@ -89,6 +115,10 @@ func usage() {
 	fmt.Print(usageText())
 }
 
+func usageFull() {
+	fmt.Print(usageFullText())
+}
+
 func helpPager() {
 	// $PAGER commonly carries arguments (e.g. "less -R"); treating the whole
 	// string as one literal binary name would fail to even start.
@@ -97,7 +127,7 @@ func helpPager() {
 		fields = []string{"less"}
 	}
 	cmd := exec.Command(fields[0], fields[1:]...)
-	cmd.Stdin = strings.NewReader(usageText())
+	cmd.Stdin = strings.NewReader(usageFullText())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -115,13 +145,8 @@ func main() {
 
 	var rest []string
 	wantHelp := false
-	var pacOp pacmanOp
-	havePacOp := false
+	wantAll := false
 	for _, a := range os.Args[1:] {
-		if p, ok := parsePacmanOp(a); ok {
-			pacOp, havePacOp = p, true
-			continue
-		}
 		switch {
 		case a == "--noconfirm" || a == "-y":
 			cfg.NoConfirm = true
@@ -138,19 +163,11 @@ func main() {
 			}
 		case a == "--help" || a == "-h":
 			wantHelp = true
+		case a == "--all":
+			wantAll = true
 		default:
 			rest = append(rest, a)
 		}
-	}
-
-	// pacman-style invocation (-S, -Syu, -Rns, -Qi, ...) takes over
-	// entirely; everything left in rest is its operands.
-	if havePacOp {
-		app := &App{Cfg: cfg}
-		if err := app.runPacmanOp(pacOp, rest); err != nil {
-			ui.Die("%v", err)
-		}
-		return
 	}
 
 	var rawCmd string
@@ -163,17 +180,31 @@ func main() {
 	// --help/-h anywhere on the line shows that subcommand's own usage if
 	// one was given (e.g. `vpa install --help`), otherwise the general one.
 	if wantHelp {
-		if cmd == "" || !printCommandHelp(cmd) {
+		if wantAll {
+			usageFull()
+		} else if cmd == "" || !printCommandHelp(cmd) {
 			usage()
 		}
 		return
 	}
 
-	// `vpa help <cmd>` shows <cmd>'s own usage; bare `vpa help`/`h`/`?` (or
-	// no command at all) shows the general one.
+	// `vpa help <cmd>` shows that command's own usage, `vpa help --all`
+	// shows every command, and bare `vpa help`/`h`/`?` (or no command at
+	// all) shows the short overview.
 	if cmd == "help" || rawCmd == "" {
-		if len(rest) > 0 && printCommandHelp(rest[0]) {
+		if wantAll {
+			usageFull()
 			return
+		}
+		if len(rest) > 0 {
+			if rest[0] == "--all" || rest[0] == "-a" || rest[0] == "all" {
+				usageFull()
+				return
+			}
+			if printCommandHelp(rest[0]) {
+				return
+			}
+			ui.Warn("no command called '%s' -- here's what vpa can do:", rest[0])
 		}
 		usage()
 		return
@@ -184,62 +215,73 @@ func main() {
 	var runErr error
 	switch cmd {
 	case "search":
-		if len(rest) == 0 {
-			printCommandHelp(cmd)
-			os.Exit(1)
-		}
-		runErr = app.cmdSearch(rest)
+		runErr = requireArgs(cmd, rest, app.cmdSearch)
 	case "info":
-		if len(rest) == 0 {
-			printCommandHelp(cmd)
-			os.Exit(1)
-		}
-		runErr = app.cmdInfo(rest)
+		runErr = requireArgs(cmd, rest, app.cmdInfo)
 	case "install":
-		if len(rest) == 0 {
-			printCommandHelp(cmd)
-			os.Exit(1)
-		}
-		runErr = app.cmdInstall(rest)
+		runErr = requireArgs(cmd, rest, app.cmdInstall)
+	case "devinstall":
+		runErr = requireArgs(cmd, rest, app.cmdDevInstall)
+	case "forceinstall":
+		runErr = requireArgs(cmd, rest, app.cmdForceInstall)
 	case "remove":
-		if len(rest) == 0 {
-			printCommandHelp(cmd)
-			os.Exit(1)
-		}
-		runErr = app.cmdRemove(rest)
+		runErr = requireArgs(cmd, rest, app.cmdRemove)
+	case "removerecursive":
+		runErr = requireArgs(cmd, rest, app.cmdRemoveRecursive)
 	case "update":
 		runErr = app.cmdUpdate()
-	case "clean":
-		runErr = app.cmdClean()
+	case "sync":
+		runErr = app.cmdSync()
 	case "list":
 		runErr = app.cmdList(rest)
-	case "files":
-		runErr = app.cmdFiles(rest)
-	case "owns":
-		runErr = app.cmdOwns(rest)
+	case "filelist":
+		runErr = requireArgs(cmd, rest, app.cmdFileList)
+	case "whatprovides":
+		runErr = requireArgs(cmd, rest, app.cmdWhatProvides)
+	case "searchfile":
+		runErr = requireArgs(cmd, rest, app.cmdSearchFile)
 	case "deps":
-		runErr = app.cmdDeps(rest)
-	case "revdeps":
-		runErr = app.cmdRevDeps(rest)
+		runErr = requireArgs(cmd, rest, app.cmdDeps)
+	case "reverse":
+		runErr = requireArgs(cmd, rest, app.cmdReverse)
 	case "orphans":
 		runErr = app.cmdOrphans()
 	case "autoremove":
 		runErr = app.cmdAutoremove()
 	case "reconfigure":
-		runErr = app.cmdReconfigure(rest)
-	case "repos":
-		runErr = app.cmdRepos()
+		runErr = requireArgs(cmd, rest, app.cmdReconfigure)
+	case "listrepos":
+		runErr = app.cmdListRepos()
+	case "addrepo":
+		runErr = requireArgs(cmd, rest, app.cmdAddRepo)
+	case "listalternatives":
+		runErr = app.cmdListAlternatives()
+	case "setalternative":
+		runErr = requireArgs(cmd, rest, app.cmdSetAlternative)
+	case "cleanup":
+		runErr = app.cmdClean()
 	case "hold":
 		runErr = app.cmdHold(rest)
 	case "unhold":
-		runErr = app.cmdUnhold(rest)
+		runErr = requireArgs(cmd, rest, app.cmdUnhold)
 	case "helppager":
 		helpPager()
 	default:
-		ui.Die("unknown command '%s' (try: vpa help)", rawCmd)
+		ui.Die("I don't know the command '%s'. Run 'vpa help' to see what vpa can do.", rawCmd)
 	}
 
 	if runErr != nil {
 		ui.Die("%v", runErr)
 	}
+}
+
+// requireArgs runs fn, but shows the command's own usage instead if the
+// user gave it nothing to work on -- more useful to a newcomer than an
+// error string.
+func requireArgs(cmd string, args []string, fn func([]string) error) error {
+	if len(args) == 0 {
+		printCommandHelp(cmd)
+		os.Exit(1)
+	}
+	return fn(args)
 }

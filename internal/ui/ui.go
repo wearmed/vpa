@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -90,4 +91,32 @@ func trimNewline(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// Ask presents a prompt with single-letter choices (the first is the
+// default when the user just presses enter) and returns the chosen letter
+// in lowercase. Honors NoConfirm by taking the default.
+func Ask(prompt string, choices string, format string, a ...any) string {
+	msg := fmt.Sprintf(format, a...)
+	def := strings.ToLower(string(choices[0]))
+	if NoConfirm {
+		Info("%s [auto: %s]", msg, def)
+		return def
+	}
+	for {
+		fmt.Fprintf(os.Stderr, "%s %s ", msg, prompt)
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return def
+		}
+		line = strings.ToLower(strings.TrimSpace(line))
+		if line == "" {
+			return def
+		}
+		if len(line) == 1 && strings.Contains(strings.ToLower(choices), line) {
+			return line
+		}
+		Warn("please answer with one of: %s", strings.Join(strings.Split(strings.ToLower(choices), ""), "/"))
+	}
 }

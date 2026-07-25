@@ -394,3 +394,77 @@ func Unhold(names []string) error {
 
 // ListHeld lists packages currently on hold.
 func ListHeld() error { return sysutil.RunInteractive("xbps-query", "-H") }
+
+// SyncRepos refreshes the repository indexes.
+func SyncRepos(noconfirm bool) error {
+	args := []string{"xbps-install", "-S"}
+	if noconfirm {
+		args = append(args, "-y")
+	}
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// ForceInstall reinstalls packages, overwriting existing files.
+func ForceInstall(repoDir string, pkgs ...string) error {
+	args := append([]string{"xbps-install", "--repository=" + repoDir, "-f", "-y"}, pkgs...)
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// RemoveRecursive removes packages along with dependencies nothing else needs.
+func RemoveRecursive(pkgs ...string) error {
+	args := append([]string{"xbps-remove", "-R", "-y"}, pkgs...)
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// SearchFile finds installed packages containing a matching file path.
+func SearchFile(pattern string) error {
+	return sysutil.RunInteractive("xbps-query", "-o", "*"+pattern+"*")
+}
+
+// ListAlternatives lists alternative candidate groups.
+func ListAlternatives() error {
+	return sysutil.RunInteractive("xbps-alternatives", "-l")
+}
+
+// SetAlternative selects the alternatives group provided by pkg.
+func SetAlternative(pkg string) error {
+	return sysutil.RunInteractive("sudo", "xbps-alternatives", "-s", pkg)
+}
+
+// CleanCache removes cached packages; deep also drops uninstalled ones.
+func CleanCache(deep, noconfirm bool) error {
+	flag := "-O"
+	if deep {
+		flag = "-OO"
+	}
+	args := []string{"xbps-remove", flag}
+	if noconfirm {
+		args = append(args, "-y")
+	}
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// AddRepo writes a new repository definition into /etc/xbps.d.
+func AddRepo(url string) error {
+	conf := fmt.Sprintf("repository=%s\n", url)
+	tmp, err := os.CreateTemp("", "vpa-repo-*.conf")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(conf); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+
+	name := strings.NewReplacer("/", "_", ":", "_", ".", "_").Replace(strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"))
+	dest := "/etc/xbps.d/10-vpa-" + name + ".conf"
+	if err := sysutil.RunInteractive("sudo", "cp", tmp.Name(), dest); err != nil {
+		return fmt.Errorf("couldn't write %s: %w", dest, err)
+	}
+	if err := sysutil.RunInteractive("sudo", "chmod", "0644", dest); err != nil {
+		return err
+	}
+	return nil
+}

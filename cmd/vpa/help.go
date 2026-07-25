@@ -14,30 +14,46 @@ func canonicalCommand(name string) string {
 		return "info"
 	case "install", "i":
 		return "install"
+	case "devinstall", "di":
+		return "devinstall"
+	case "forceinstall", "fi":
+		return "forceinstall"
 	case "remove", "rm":
 		return "remove"
-	case "update", "up", "upgrade", "su":
+	case "removerecursive", "rr":
+		return "removerecursive"
+	case "update", "up", "upgrade":
 		return "update"
-	case "clean", "cl":
-		return "clean"
+	case "sync", "sy":
+		return "sync"
 	case "list", "ls":
 		return "list"
-	case "files", "fl":
-		return "files"
-	case "owns", "wp", "whatprovides":
-		return "owns"
+	case "filelist", "fl", "files":
+		return "filelist"
+	case "whatprovides", "wp", "owns":
+		return "whatprovides"
+	case "searchfile", "sf":
+		return "searchfile"
 	case "deps":
 		return "deps"
-	case "revdeps", "rv":
-		return "revdeps"
+	case "reverse", "rv", "revdeps":
+		return "reverse"
 	case "orphans":
 		return "orphans"
 	case "autoremove", "ar":
 		return "autoremove"
 	case "reconfigure", "rc":
 		return "reconfigure"
-	case "repos", "lr", "listrepos":
-		return "repos"
+	case "listrepos", "lr", "repolist", "rl", "repos":
+		return "listrepos"
+	case "addrepo":
+		return "addrepo"
+	case "listalternatives", "la":
+		return "listalternatives"
+	case "setalternative", "sa":
+		return "setalternative"
+	case "cleanup", "cl", "clean":
+		return "cleanup"
 	case "hold":
 		return "hold"
 	case "unhold":
@@ -52,127 +68,164 @@ func canonicalCommand(name string) string {
 }
 
 var commandHelp = map[string]string{
-	"search": `vpa search (s) <term>        [pacman: -Ss]
+	"search": `vpa search (s) <term>
 
-Search both Void's repositories and the AUR by name and description.
-Void results are listed first (a native package is nearly always the
-better choice when one exists); anything already installed is marked.
+Search Void's repositories and the AUR at the same time. Void results
+come first -- a native package is nearly always the better choice when
+one exists. Anything you already have is marked [installed].
 
-Example:
-  vpa search pipes
+  vpa search firefox
 `,
-	"info": `vpa info <pkg>               [pacman: -Si]
+	"info": `vpa info <pkg>
 
-Show full details for a package, from wherever it exists -- Void's
+Show details for a package, from wherever it exists: Void's
 repositories, the AUR, or both.
 
-Example:
   vpa info firefox
-  vpa info pipes.sh
 `,
-	"install": `vpa install (i) <pkg> [pkg...]   [pacman: -S]
+	"install": `vpa install (i) <pkg> [pkg...]
 
-Install package(s) from anywhere. Each argument can be:
-  - a package in Void's repos (installed directly, nothing is built)
-  - an AUR package name (PKGBUILD reviewed, built, packaged as .xbps)
-  - a search term with no exact match (opens a numbered picker)
-  - a .xbps file or URL (installed directly)
-  - a .deb/.rpm/.pkg.tar.zst file or URL (extracted and repackaged
-    as a real .xbps; packaging only, it can't fix cross-distro ABI
-    differences)
+Install packages. vpa works out where each one comes from:
 
-Relevant flags: --edit, --parallel=<N>, --noconfirm/-y
+  from Void's repositories   installed directly, nothing is built
+  from the AUR               shows you what it is, then builds it
+  a search term              opens a numbered list to pick from
+  a .xbps file or URL        installed directly
+  a .deb / .rpm / Arch file  unpacked and repackaged for Void
 
-Examples:
   vpa install firefox
   vpa install pipes.sh
-  vpa i -y --edit somefuzzyterm
-  vpa i ./something.deb
-  vpa i ./something.xbps
+  vpa install ./something.deb
+
+Options: --edit (edit an AUR build script first), --noconfirm
 `,
-	"remove": `vpa remove (rm) <pkg> [pkg...]   [pacman: -R, -Rs]
+	"devinstall": `vpa devinstall (di) <pkg> [pkg...]
 
-Remove installed package(s). Use pacman's -Rs form to also remove
-dependencies that nothing else needs anymore.
+Install packages along with their -devel counterparts (the headers and
+files you need to build software against them). Packages with no
+-devel counterpart are installed on their own.
 
-Examples:
+  vpa devinstall openssl
+`,
+	"forceinstall": `vpa forceinstall (fi) <pkg> [pkg...]
+
+Reinstall packages, overwriting files already on disk. This is for
+repairing a package whose files got damaged -- use 'vpa install' for
+everything else.
+`,
+	"remove": `vpa remove (rm) <pkg> [pkg...]
+
+Remove packages.
+
   vpa remove firefox
-  vpa -Rs pipes.sh
 `,
-	"update": `vpa update (up, upgrade, su)
+	"removerecursive": `vpa removerecursive (rr) <pkg> [pkg...]
 
-Update everything:
-  1. vpa itself, if a newer version is available (silent if current)
-  2. a full system upgrade (sudo xbps-install -Su)
-  3. any vpa-tracked AUR package with a newer version
+Remove packages, plus any dependencies they pulled in that nothing
+else needs anymore.
+`,
+	"update": `vpa update (up, upgrade)
 
-Relevant flags: --devel (also rebuild -git/-svn/-hg packages if
-upstream moved past pkgver even though the version string didn't
-change), --noconfirm/-y
+Update everything, in this order:
 
-Examples:
+  1. vpa itself, if there's a newer version
+  2. all your installed packages
+  3. anything vpa built from the AUR
+
   vpa update
-  vpa update --devel
-  vpa -Syu
+
+Options: --devel (also rebuild -git packages when their upstream code
+changed, even if the version number didn't)
 `,
-	"clean": `vpa clean (cl)               [pacman: -Sc, -Scc]
+	"sync": `vpa sync (sy)
 
-Wipe vpa's build cache, and optionally the local package repo (you'll
-be asked before that part happens). The pacman forms also clean xbps's
-own package cache: -Sc drops outdated packages, -Scc drops all of them.
+Refresh the list of available packages from your repositories, without
+installing or updating anything. 'vpa update' does this for you, so you
+rarely need to run it yourself.
 `,
-	"list": `vpa list (ls) [--aur]        [pacman: -Q]
+	"list": `vpa list (ls) [--aur]
 
-List every installed package on the system, tagging the ones vpa built
-from the AUR. Pass --aur (or -a) to list only those.
-
-Related: vpa -Qe (explicitly installed), vpa orphans
+List every package installed on your system. Packages vpa built from
+the AUR are tagged (aur). Pass --aur to list only those.
 `,
-	"files": `vpa files (fl) <pkg>         [pacman: -Ql]
+	"filelist": `vpa filelist (fl) <pkg>
 
-List the files a package owns.
+List the files a package installs. Works for packages you don't have
+installed too.
+
+  vpa filelist firefox
 `,
-	"owns": `vpa owns (wp) <file>         [pacman: -Qo]
+	"whatprovides": `vpa whatprovides (wp) <file>
 
-Show which package owns a file.
+Show which package a file came from.
 
-Example:
-  vpa owns /usr/bin/firefox
+  vpa whatprovides /usr/bin/firefox
+`,
+	"searchfile": `vpa searchfile (sf) <file>
+
+Find installed packages containing a file matching what you type. Use
+this when you know part of a filename but not the package.
+
+  vpa searchfile libssl
 `,
 	"deps": `vpa deps <pkg>
 
-Show a package's dependencies.
+Show what a package needs in order to work.
 `,
-	"revdeps": `vpa revdeps (rv) <pkg>
+	"reverse": `vpa reverse (rv) <pkg>
 
-Show what depends on a package (reverse dependencies).
+Show what would break if you removed a package -- everything that
+depends on it.
 `,
-	"orphans": `vpa orphans                  [pacman: -Qdt]
+	"orphans": `vpa orphans
 
-List packages that were installed as dependencies and are no longer
-needed by anything. Use 'vpa autoremove' to remove them.
+List packages that were only installed as dependencies and aren't
+needed by anything anymore. 'vpa autoremove' clears them out.
 `,
 	"autoremove": `vpa autoremove (ar)
 
-Remove all orphaned packages (see 'vpa orphans').
+Remove packages that were only installed as dependencies and aren't
+needed anymore (see 'vpa orphans').
 `,
 	"reconfigure": `vpa reconfigure (rc) <pkg|all>
 
-Re-run a package's configuration step. Pass 'all' to reconfigure every
-installed package.
+Re-run a package's setup step. Useful if a package didn't finish
+configuring properly. Pass 'all' to do every installed package.
 `,
-	"repos": `vpa repos (lr)
+	"listrepos": `vpa listrepos (lr)
 
-List the configured xbps repositories.
+Show the repositories vpa installs from.
+`,
+	"addrepo": `vpa addrepo <url>
+
+Add another repository to install packages from. Only add repositories
+you trust: anything in them can install files anywhere on your system.
+
+  vpa addrepo https://repo-default.voidlinux.org/current/nonfree
+`,
+	"listalternatives": `vpa listalternatives (la)
+
+Show which package currently provides things that several packages can
+provide (like a default text editor or C compiler).
+`,
+	"setalternative": `vpa setalternative (sa) <pkg>
+
+Choose which package provides an alternative (see
+'vpa listalternatives').
+`,
+	"cleanup": `vpa cleanup (cl)
+
+Free up disk space: clears vpa's build files and downloaded packages
+you no longer need. Safe to run whenever.
 `,
 	"hold": `vpa hold [pkg...]
 
-Hold packages back from updates. With no arguments, lists what's
-currently held.
+Stop packages being updated by 'vpa update'. With no arguments, shows
+what's currently held.
 `,
 	"unhold": `vpa unhold <pkg> [pkg...]
 
-Release packages previously held back by 'vpa hold'.
+Allow held packages to be updated again.
 `,
 }
 

@@ -7,22 +7,37 @@ import (
 	"vpa/internal/xbpsutil"
 )
 
-// The commands in this file expose the rest of xbps's day-to-day surface as
-// first-class vpa subcommands, so managing a Void system never needs to drop
-// back to raw xbps-* invocations.
+// The commands in this file cover the rest of xbps's day-to-day surface, so
+// managing a Void system never needs to drop back to raw xbps-* invocations.
+// Names and aliases follow vpm's, since that's the xbps front-end people
+// already know.
 
-func (a *App) cmdFiles(args []string) error {
+func (a *App) cmdSync() error {
+	if !ui.Confirm("Refresh repository data?") {
+		return nil
+	}
+	return xbpsutil.SyncRepos(ui.NoConfirm)
+}
+
+func (a *App) cmdFileList(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: vpa files <pkg>")
+		return fmt.Errorf("usage: vpa filelist <pkg>")
 	}
 	return xbpsutil.Files(args[0], a.Cfg.RepoDir)
 }
 
-func (a *App) cmdOwns(args []string) error {
+func (a *App) cmdWhatProvides(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: vpa owns <file>")
+		return fmt.Errorf("usage: vpa whatprovides <file>")
 	}
 	return xbpsutil.Owns(args[0])
+}
+
+func (a *App) cmdSearchFile(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa searchfile <file>")
+	}
+	return xbpsutil.SearchFile(args[0])
 }
 
 func (a *App) cmdDeps(args []string) error {
@@ -32,9 +47,9 @@ func (a *App) cmdDeps(args []string) error {
 	return xbpsutil.Deps(args[0], a.Cfg.RepoDir)
 }
 
-func (a *App) cmdRevDeps(args []string) error {
+func (a *App) cmdReverse(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: vpa revdeps <pkg>")
+		return fmt.Errorf("usage: vpa reverse <pkg>")
 	}
 	return xbpsutil.RevDeps(args[0], a.Cfg.RepoDir)
 }
@@ -42,7 +57,7 @@ func (a *App) cmdRevDeps(args []string) error {
 func (a *App) cmdOrphans() error { return xbpsutil.Orphans() }
 
 func (a *App) cmdAutoremove() error {
-	if !ui.Confirm("Remove all orphaned packages?") {
+	if !ui.Confirm("Remove packages that were installed as dependencies and are no longer needed?") {
 		return nil
 	}
 	return xbpsutil.Autoremove(ui.NoConfirm)
@@ -55,7 +70,75 @@ func (a *App) cmdReconfigure(args []string) error {
 	return xbpsutil.Reconfigure(args[0])
 }
 
-func (a *App) cmdRepos() error { return xbpsutil.Repos() }
+func (a *App) cmdListRepos() error { return xbpsutil.Repos() }
+
+func (a *App) cmdAddRepo(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa addrepo <url>")
+	}
+	url := args[0]
+	ui.Warn("This adds %s as a package source for your whole system. Only add repositories you trust -- packages from it can install anything, as root.", url)
+	if !ui.Confirm("Add this repository?") {
+		return nil
+	}
+	if err := xbpsutil.AddRepo(url); err != nil {
+		return err
+	}
+	ui.Ok("added %s", url)
+	return xbpsutil.SyncRepos(ui.NoConfirm)
+}
+
+func (a *App) cmdForceInstall(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa forceinstall <pkg> [pkg...]")
+	}
+	ui.Warn("Force-installing overwrites files already on disk. This is for repairing a broken package, not normal installs -- use 'vpa install' for those.")
+	if !ui.Confirm("Force-install %v?", args) {
+		return nil
+	}
+	return xbpsutil.ForceInstall(a.Cfg.RepoDir, args...)
+}
+
+func (a *App) cmdRemoveRecursive(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa removerecursive <pkg> [pkg...]")
+	}
+	if !ui.Confirm("Remove %v, plus any dependencies nothing else needs?", args) {
+		return nil
+	}
+	if err := xbpsutil.RemoveRecursive(args...); err != nil {
+		return err
+	}
+	return a.forgetRemoved(args)
+}
+
+func (a *App) cmdDevInstall(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa devinstall <pkg> [pkg...]")
+	}
+	// A -devel package only exists for some packages; include the ones that
+	// really do rather than failing the whole install on the ones that don't.
+	var want []string
+	for _, p := range args {
+		want = append(want, p)
+		devel := p + "-devel"
+		if xbpsutil.IsAvailable(devel, a.Cfg.RepoDir) {
+			want = append(want, devel)
+		} else {
+			ui.Info("no %s package exists; installing %s on its own", devel, p)
+		}
+	}
+	return a.cmdInstall(want)
+}
+
+func (a *App) cmdListAlternatives() error { return xbpsutil.ListAlternatives() }
+
+func (a *App) cmdSetAlternative(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: vpa setalternative <pkg>")
+	}
+	return xbpsutil.SetAlternative(args[0])
+}
 
 func (a *App) cmdHold(args []string) error {
 	if len(args) == 0 {
@@ -64,7 +147,7 @@ func (a *App) cmdHold(args []string) error {
 	if err := xbpsutil.Hold(args); err != nil {
 		return err
 	}
-	ui.Ok("held: %v", args)
+	ui.Ok("held back from updates: %v", args)
 	return nil
 }
 
@@ -75,6 +158,6 @@ func (a *App) cmdUnhold(args []string) error {
 	if err := xbpsutil.Unhold(args); err != nil {
 		return err
 	}
-	ui.Ok("unheld: %v", args)
+	ui.Ok("no longer held: %v", args)
 	return nil
 }

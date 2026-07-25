@@ -25,37 +25,46 @@ builds a static binary, and symlinks it into `~/.local/bin` (`--system` for
 
 ## Usage
 
-Every operation is reachable three ways — the full name, a short alias, or
-pacman syntax:
-
 ```
-PACKAGES
-vpa search  (s)  <term>      -Ss     search Void's repos + the AUR
-vpa info         <pkg>       -Si     details from Void's repos and/or AUR
-vpa install (i)  <pkg>...    -S      install from anywhere
-vpa remove  (rm) <pkg>...    -R      remove
-vpa update  (up)             -Syu    update everything
-vpa list    (ls) [--aur]     -Q      list installed
+INSTALLING AND REMOVING
+vpa install (i)  <pkg>...        install from anywhere
+vpa devinstall (di) <pkg>...     install packages plus their -devel parts
+vpa remove  (rm) <pkg>...        remove
+vpa removerecursive (rr) <pkg>   remove, plus unneeded dependencies
+vpa update  (up)                 update vpa, your system, and AUR packages
+vpa sync    (sy)                 refresh repository data only
 
-QUERYING
-vpa files   (fl) <pkg>       -Ql     files a package owns
-vpa owns    (wp) <file>      -Qo     which package owns a file
-vpa deps         <pkg>               a package's dependencies
-vpa revdeps (rv) <pkg>               what depends on a package
-vpa orphans                  -Qdt    no-longer-needed dependencies
-vpa repos   (lr)                     configured repositories
+FINDING THINGS
+vpa search  (s)  <term>          search Void's repos + the AUR
+vpa info         <pkg>           details from Void's repos and/or AUR
+vpa list    (ls) [--aur]         list installed packages
+vpa filelist (fl) <pkg>          files a package installs
+vpa whatprovides (wp) <file>     which package a file came from
+vpa searchfile (sf) <file>       find installed packages containing a file
+vpa deps         <pkg>           what a package needs
+vpa reverse (rv) <pkg>           what depends on a package
 
-MAINTENANCE
-vpa autoremove  (ar)                 remove orphaned packages
-vpa reconfigure (rc) <pkg|all>       re-run configuration
-vpa hold / unhold    <pkg>...        hold packages back from updates
-vpa clean       (cl)         -Sc     clean build/package caches
-vpa help        (h, ?)               show usage
+LOOKING AFTER YOUR SYSTEM
+vpa orphans                      no-longer-needed dependencies
+vpa autoremove (ar)              remove those
+vpa cleanup (cl)                 free up disk space
+vpa reconfigure (rc) <pkg|all>   re-run a package's setup step
+vpa hold / unhold <pkg>...       stop packages being updated
+
+REPOSITORIES AND ALTERNATIVES
+vpa listrepos (lr)               show configured repositories
+vpa addrepo <url>                add another repository
+vpa listalternatives (la)        show configurable defaults
+vpa setalternative (sa) <pkg>    choose which package provides one
 ```
 
-`vpa`, `vpa help`, `vpa h` and `vpa ?` all show the general help. Every
-subcommand has its own usage text too — `vpa help install`, `vpa install
---help`, or just `vpa install` with no arguments.
+Command names and aliases follow [`vpm`](https://github.com/netzverweigerer/vpm),
+the xbps front-end many Void users already know.
+
+`vpa` on its own gives you a short overview of the handful of commands you
+actually need day to day; `vpa help --all` lists everything. Each command
+explains itself too — `vpa help install`, `vpa install --help`, or just
+`vpa install` with nothing after it.
 
 ### What `vpa install` accepts
 
@@ -81,7 +90,7 @@ built from the AUR; `vpa list --aur` narrows it to just those.
 ### `vpa update`
 
 Updates everything in one go: vpa itself (if a newer version exists), a full
-system upgrade, then any AUR package vpa tracks. `-Syu` does the same.
+system upgrade, then any AUR package vpa tracks.
 
 ### Flags
 
@@ -91,19 +100,12 @@ packages when upstream moved but `pkgver` didn't), `--parallel=<N>`
 (concurrent source downloads, default 4). All persist in
 `~/.config/vpa/vpa.conf` (`PARALLEL_DOWNLOADS=N` for the last one).
 
-### More pacman syntax
-
-`-Sy` refresh · `-Su` upgrade · `-Syu`/`-Syyu` both · `-Scc` deep clean ·
-`-Rs` remove + unneeded deps · `-U <file>` install a file · `-Qi` info ·
-`-Qs` search installed · `-Ql` a package's files · `-Qo` who owns a file ·
-`-Qe` explicitly installed · `-Qdt` orphans
-
 ```sh
 vpa i firefox              # straight from Void's repos
 vpa i pipes.sh             # from the AUR
 vpa i ./something.deb      # repackaged as .xbps
-vpa -Syu                   # update everything
-vpa -Qo /usr/bin/brave-origin
+vpa update                 # update everything
+vpa wp /usr/bin/brave-origin
 ```
 
 ## How it works
@@ -112,9 +114,11 @@ For a Void repo package or a `.xbps` file, vpa just drives `xbps` directly.
 For an AUR package:
 
 1. Resolves the `PackageBase` via the AUR RPC and clones its git repo.
-2. Shows the full `PKGBUILD` (diffed against the last reviewed copy if it
-   changed) and asks for confirmation before ever sourcing it — same trust
-   model as yay/paru/pikaur. `--edit` lets you change it first.
+2. Shows a plain summary of what it is, where the code is downloaded from
+   and what it pulls in, then asks before running any of it — the full
+   build script is one keypress away, and re-installing something whose
+   script changed shows you a diff. Same trust model as yay/paru/pikaur:
+   an AUR package is a stranger's script, and building it runs their code.
 3. Resolves `depends`/`makedepends` against Void's repos, using `depmap.conf`
    to bridge Arch/Void naming drift (e.g. `gtk2` → `gtk+`). If a dependency
    has no Void package by that name, before giving up vpa checks what shared
@@ -145,9 +149,6 @@ For an AUR package:
   their declared deps are printed as a warning, not installed.
 - Shared-library dependency matching only works for actual libraries —
   virtual/meta names with no `.so` file (e.g. `ttf-font`) stay unresolved.
-- `-Syy` isn't more forceful than `-Sy` (xbps always re-fetches repodata),
-  and pacman's `-Rn` has no xbps equivalent (xbps deliberately preserves
-  modified config files) — vpa warns rather than pretending otherwise.
 
 ## Credits
 
@@ -159,7 +160,12 @@ takes cues from [vpm](https://github.com/netzverweigerer/vpm).
 
 ## License
 
-GPLv3, see [LICENSE](LICENSE).
+Copyright (C) 2026 suraj. Licensed under the GNU General Public License
+v3 — see [LICENSE](LICENSE).
+
+Free software: use it, modify it, share it. If you distribute a modified
+version, it has to stay GPLv3 and ship its source too, so vpa can never be
+turned into someone else's closed-source product.
 
 ---
 
