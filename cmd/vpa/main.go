@@ -30,9 +30,9 @@ Getting started:
   vpa install firefox    install it
   vpa update             keep everything current
 
-vpa installs from Void's own repositories, the AUR, and .xbps/.deb/.rpm
-package files -- you don't have to know which is which, just name what
-you want.
+vpa installs from Void's own repositories, the AUR, Flathub, and
+.xbps/.deb/.rpm package files -- you don't have to know which is which,
+just name what you want.
 
 vpa assumes yes and gets on with it. "vpa --assumeno" makes it ask first
 (and "vpa --assumeyes" switches back) -- either way it still shows you an
@@ -57,19 +57,20 @@ USAGE:
 vpa [OPTIONS] <COMMAND> [ARGS]
 
 INSTALLING AND REMOVING:
-install (i) <pkg(s)>          - Install from Void's repos, the AUR, or a
-                                 .xbps/.deb/.rpm/.pkg.tar.zst file
+install (i) <pkg(s)>          - Install from Void's repos, the AUR,
+                                 Flathub, or a package file
 devinstall (di) <pkg(s)>      - Install packages plus their -devel parts
 forceinstall (fi) <pkg(s)>    - Reinstall, overwriting existing files
 remove (rm) <pkg(s)>          - Remove packages
 removerecursive (rr) <pkg(s)> - Remove packages and unneeded dependencies
-update (up, upgrade)          - Update vpa, your system, and AUR packages
+update (up, upgrade)          - Update vpa, Flatpaks, your system, and
+                                 AUR packages
 sync (sy)                     - Refresh repository data only
 
 FINDING THINGS:
-search (s) <term>             - Search Void's repos and the AUR
+search (s) <term>             - Search Void's repos, the AUR and Flathub
 info <pkg>                    - Show details for a package
-list (ls) [--aur]             - List installed packages
+list (ls) [--aur]             - List installed packages (incl. Flatpaks)
 filelist (fl) <pkg>           - List the files a package installs
 whatprovides (wp) <file>      - Show which package a file came from
 searchfile (sf) <file>        - Find installed packages containing a file
@@ -103,6 +104,7 @@ OPTIONS:
 --edit                        - Edit an AUR build script before building
 --devel                       - Also rebuild -git packages whose upstream
                                  code changed
+--flatpak                     - Install the named packages from Flathub
 --parallel=<N>                - Concurrent downloads (default: 4)
 --color=<yes|no|auto>         - Colored output (default: auto)
 --help                        - Show help, or a command's own help
@@ -166,6 +168,8 @@ func main() {
 			cfg.EditPKGBUILD = true
 		case a == "--devel":
 			cfg.Devel = true
+		case a == "--flatpak":
+			cfg.PreferFlatpak = true
 		case strings.HasPrefix(a, "--color="):
 			ui.SetColors(strings.TrimPrefix(a, "--color="))
 		case strings.HasPrefix(a, "--parallel="):

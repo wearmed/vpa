@@ -50,3 +50,11 @@ func Output(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).Output()
 	return string(out), err
 }
+
+// Has reports whether a binary is on PATH, without prompting to install it
+// (unlike RequireBin). For optional integrations that should simply be
+// skipped when absent.
+func Has(bin string) bool {
+	_, err := exec.LookPath(bin)
+	return err == nil
+}

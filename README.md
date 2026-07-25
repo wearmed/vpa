@@ -3,8 +3,8 @@
 **V**oid **P**ackage **A**ssistant — the only Void package manager you'll need.
 
 One tool for everything you install on Void: your normal `xbps` packages, the
-[AUR](https://aur.archlinux.org), standalone `.xbps` files, and even prebuilt
-Debian/RPM/Arch packages. Anything it builds or imports becomes a real `.xbps`
+[AUR](https://aur.archlinux.org), Flatpaks from Flathub, standalone `.xbps`
+files, and even prebuilt Debian/RPM/Arch packages. Anything it builds or imports becomes a real `.xbps`
 package, so it's tracked and cleanly removable through `xbps` like everything
 else on your system — never just files dumped onto your filesystem.
 
@@ -31,13 +31,13 @@ vpa install (i)  <pkg>...        install from anywhere
 vpa devinstall (di) <pkg>...     install packages plus their -devel parts
 vpa remove  (rm) <pkg>...        remove
 vpa removerecursive (rr) <pkg>   remove, plus unneeded dependencies
-vpa update  (up)                 update vpa, your system, and AUR packages
+vpa update  (up)                 update vpa, Flatpaks, system and AUR packages
 vpa sync    (sy)                 refresh repository data only
 
 FINDING THINGS
-vpa search  (s)  <term>          search Void's repos + the AUR
-vpa info         <pkg>           details from Void's repos and/or AUR
-vpa list    (ls) [--aur]         list installed packages
+vpa search  (s)  <term>          search Void's repos, the AUR + Flathub
+vpa info         <pkg>           details from Void's repos, AUR or Flathub
+vpa list    (ls) [--aur]         list installed packages and Flatpaks
 vpa filelist (fl) <pkg>          files a package installs
 vpa whatprovides (wp) <file>     which package a file came from
 vpa searchfile (sf) <file>       find installed packages containing a file
@@ -70,6 +70,7 @@ explains itself too — `vpa help install`, `vpa install --help`, or just
 
 - a package already in Void's repos → installs it directly, no AUR involved
 - an AUR package name → reviews the PKGBUILD, builds it, installs it
+- a Flatpak app ID (`org.mozilla.firefox`) → installs it from Flathub
 - a search term with no exact match → numbered picker (`1 3 5-7`)
 - a `.xbps` file or URL → installs it directly
 - a `.deb`/`.rpm`/`.pkg.tar.zst` file or URL → extracts and repackages it as
@@ -79,18 +80,31 @@ explains itself too — `vpa help install`, `vpa install --help`, or just
 
 ### Searching and listing
 
-`vpa search` covers Void's repositories and the AUR in one pass, listing
+`vpa search` covers Void's repositories, the AUR and Flathub in one pass, listing
 Void results first (a native package is nearly always the better choice when
 one exists) and marking anything already installed. `vpa info` works the
 same way, showing a package from whichever side it exists on — or both.
 
 `vpa list` shows every installed package on the system, tagging the ones vpa
-built from the AUR; `vpa list --aur` narrows it to just those.
+built from the AUR and any Flatpak applications; `vpa list --aur` narrows it
+to just the AUR ones.
+
+### Flatpak
+
+Flatpak is the one thing vpa can't turn into a real `.xbps` — Flatpaks are
+sandboxed bundles with their own runtimes and their own database, so vpa
+drives `flatpak` directly rather than repackaging. They're still covered by
+`search`, `install`, `remove`, `list`, `update` and `cleanup`.
+
+Native packages win by default: a Flatpak is only installed when you give
+its full app ID or pass `--flatpak`, so you never get a sandboxed bundle
+when a native package would have done. Everything works without Flatpak
+installed — those parts are simply skipped.
 
 ### `vpa update`
 
-Updates everything in one go: vpa itself (if a newer version exists), a full
-system upgrade, then any AUR package vpa tracks.
+Updates everything in one go: vpa itself (if a newer version exists), your
+Flatpaks, a full system upgrade, then any AUR package vpa tracks.
 
 ### Asking before it does things
 
@@ -108,14 +122,16 @@ asked.
 
 Anywhere on the command line: `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
 `--edit` (open PKGBUILD in `$EDITOR` first), `--devel` (also rebuild `-git`
-packages when upstream moved but `pkgver` didn't), `--parallel=<N>`
-(concurrent source downloads, default 4). All persist in
+packages when upstream moved but `pkgver` didn't), `--flatpak` (install the
+named packages from Flathub), `--parallel=<N>` (concurrent source downloads,
+default 4). All persist in
 `~/.config/vpa/vpa.conf` (`PARALLEL_DOWNLOADS=N` for the last one).
 
 ```sh
 vpa i firefox              # straight from Void's repos
 vpa i pipes.sh             # from the AUR
 vpa i ./something.deb      # repackaged as .xbps
+vpa i org.mozilla.firefox  # from Flathub
 vpa update                 # update everything
 vpa wp /usr/bin/brave-origin
 ```

@@ -4,7 +4,6 @@
 package buildpkg
 
 import (
-	"archive/zip"
 	_ "embed"
 	"fmt"
 	"io"
@@ -81,8 +80,8 @@ func FetchSources(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, parallel int, c
 		if strings.HasPrefix(url, "git+") {
 			sysutil.RequireBin("git", "git")
 		}
-		if strings.HasSuffix(fname, ".zip") {
-			sysutil.RequireBin("unzip", "unzip")
+		if isExtractable(fname) {
+			sysutil.RequireBin("bsdtar", "bsdtar")
 		}
 	}
 	if anyNonSkip(pb.Sha512sums) {
@@ -363,63 +362,39 @@ func maybeExtract(pb *pkgbuild.PKGBUILD, fname, dir string) {
 	if isNoExtract(pb, fname) {
 		return
 	}
+	if !isExtractable(fname) {
+		return
+	}
 	full := filepath.Join(dir, fname)
-	switch {
-	case strings.HasSuffix(fname, ".zip"):
-		ui.Info("extracting %s", fname)
-		if err := extractZip(full, dir); err != nil {
-			ui.Warn("failed to extract %s: %v", fname, err)
-		}
-	case hasTarSuffix(fname):
-		ui.Info("extracting %s", fname)
-		if err := sysutil.RunQuiet("tar", "-xf", full, "-C", dir); err != nil {
-			ui.Warn("failed to extract %s: %v", fname, err)
-		}
+	ui.Info("extracting %s", fname)
+	// bsdtar (libarchive) rather than tar: makepkg uses it precisely
+	// because it reads everything, and real PKGBUILDs do ship .deb/.rpm
+	// sources and then expect to find them already unpacked in $srcdir
+	// (e.g. a package() that reads data.tar.zst out of a .deb).
+	if err := sysutil.RunQuiet("bsdtar", "-xf", full, "-C", dir); err != nil {
+		ui.Warn("failed to extract %s: %v", fname, err)
 	}
 }
 
-func hasTarSuffix(fname string) bool {
-	for _, suf := range []string{".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tar.lz"} {
-		if strings.HasSuffix(fname, suf) {
+// extractableSuffixes is what makepkg would unpack. Anything not listed --
+// patches, .desktop files, plain scripts -- is left exactly as downloaded,
+// which is what a PKGBUILD expects for those.
+var extractableSuffixes = []string{
+	".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
+	".tar.zst", ".tzst", ".tar.lz", ".tar.lz4", ".tar.lzma", ".tar.Z",
+	".zip", ".jar", ".7z", ".rar", ".cpio", ".iso",
+	".deb", ".rpm", ".pkg.tar.zst", ".pkg.tar.xz",
+	".gz", ".bz2", ".xz", ".zst", ".lzma", ".lz4",
+}
+
+func isExtractable(fname string) bool {
+	lower := strings.ToLower(fname)
+	for _, suf := range extractableSuffixes {
+		if strings.HasSuffix(lower, suf) {
 			return true
 		}
 	}
 	return false
-}
-
-func extractZip(src, destDir string) error {
-	r, err := zip.OpenReader(src)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	for _, f := range r.File {
-		path := filepath.Join(destDir, f.Name)
-		if !strings.HasPrefix(path, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("zip entry escapes destination: %s", f.Name)
-		}
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, f.Mode())
-			continue
-		}
-		os.MkdirAll(filepath.Dir(path), 0o755)
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		_, err = io.Copy(out, rc)
-		out.Close()
-		rc.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // runDriver runs an embedded driver script with values passed only through

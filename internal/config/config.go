@@ -20,13 +20,14 @@ type Config struct {
 	ConfigFile   string
 	UserDepmap   string
 
-	NoConfirm    bool
-	TrustAUR     bool
-	EditPKGBUILD bool
-	Devel        bool
-	CleanAfter   bool
-	Editor       string
-	Parallel     int
+	NoConfirm     bool
+	TrustAUR      bool
+	PreferFlatpak bool
+	EditPKGBUILD  bool
+	Devel         bool
+	CleanAfter    bool
+	Editor        string
+	Parallel      int
 }
 
 const (

@@ -70,18 +70,20 @@ func canonicalCommand(name string) string {
 var commandHelp = map[string]string{
 	"search": `vpa search (s) <term>
 
-Search Void's repositories and the AUR at the same time. Void results
-come first -- a native package is nearly always the better choice when
-one exists. Anything you already have is marked [installed].
+Search Void's repositories, the AUR and Flathub at the same time. Void
+results come first -- a native package is nearly always the better
+choice when one exists. Anything you already have is marked
+[installed].
 
   vpa search firefox
 `,
 	"info": `vpa info <pkg>
 
 Show details for a package, from wherever it exists: Void's
-repositories, the AUR, or both.
+repositories, the AUR, both, or Flathub if you give an app ID.
 
   vpa info firefox
+  vpa info org.mozilla.firefox
 `,
 	"install": `vpa install (i) <pkg> [pkg...]
 
@@ -92,12 +94,18 @@ Install packages. vpa works out where each one comes from:
   a search term              opens a numbered list to pick from
   a .xbps file or URL        installed directly
   a .deb / .rpm / Arch file  unpacked and repackaged for Void
+  a Flatpak app ID           installed from Flathub
+
+Native packages are preferred: a Flatpak is only installed if you give
+its full app ID, or pass --flatpak.
 
   vpa install firefox
   vpa install pipes.sh
   vpa install ./something.deb
+  vpa install org.mozilla.firefox
+  vpa install --flatpak obs-studio
 
-Options: --edit (edit an AUR build script first), --noconfirm
+Options: --edit (edit an AUR build script first), --flatpak, --noconfirm
 `,
 	"devinstall": `vpa devinstall (di) <pkg> [pkg...]
 
@@ -115,9 +123,10 @@ everything else.
 `,
 	"remove": `vpa remove (rm) <pkg> [pkg...]
 
-Remove packages.
+Remove packages, including installed Flatpaks (given their app ID).
 
   vpa remove firefox
+  vpa remove org.mozilla.firefox
 `,
 	"removerecursive": `vpa removerecursive (rr) <pkg> [pkg...]
 
@@ -129,8 +138,9 @@ else needs anymore.
 Update everything, in this order:
 
   1. vpa itself, if there's a newer version
-  2. all your installed packages
-  3. anything vpa built from the AUR
+  2. your Flatpak applications
+  3. all your installed packages
+  4. anything vpa built from the AUR
 
   vpa update
 
@@ -146,7 +156,8 @@ rarely need to run it yourself.
 	"list": `vpa list (ls) [--aur]
 
 List every package installed on your system. Packages vpa built from
-the AUR are tagged (aur). Pass --aur to list only those.
+the AUR are tagged (aur), and Flatpak applications (flatpak). Pass
+--aur to list only the AUR ones.
 `,
 	"filelist": `vpa filelist (fl) <pkg>
 

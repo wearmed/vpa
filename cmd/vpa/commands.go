@@ -13,6 +13,7 @@ import (
 	"vpa/internal/buildpkg"
 	"vpa/internal/config"
 	"vpa/internal/deps"
+	"vpa/internal/flatpak"
 	"vpa/internal/gitutil"
 	"vpa/internal/manifest"
 	"vpa/internal/pkgbuild"
@@ -50,13 +51,19 @@ func (a *App) cmdSearch(args []string) error {
 	var (
 		voidPkgs []xbpsutil.RepoPackage
 		aurPkgs  []aurapi.Package
+		flatApps []flatpak.App
 		voidErr  error
 		aurErr   error
 		wg       sync.WaitGroup
 	)
+	haveFlatpak := flatpak.Available()
 	wg.Add(2)
 	go func() { defer wg.Done(); voidPkgs, voidErr = xbpsutil.SearchRepos(term) }()
 	go func() { defer wg.Done(); aurPkgs, aurErr = aurapi.Search(term) }()
+	if haveFlatpak {
+		wg.Add(1)
+		go func() { defer wg.Done(); flatApps, _ = flatpak.Search(term) }()
+	}
 	wg.Wait()
 
 	if voidErr != nil {
@@ -90,8 +97,27 @@ func (a *App) cmdSearch(args []string) error {
 		}
 	}
 
-	if len(voidPkgs) == 0 && len(aurPkgs) == 0 {
-		ui.Info("no results for '%s' in Void's repos or the AUR", term)
+	for _, a := range flatApps {
+		mark := ""
+		if flatpak.IsInstalled(a.ID) {
+			mark = " [installed]"
+		}
+		fmt.Printf("%s %s%s\n", ui.Bold("flatpak/"+a.ID), a.Version, mark)
+		if a.Desc != "" {
+			fmt.Printf("    %s\n", a.Desc)
+		}
+	}
+
+	if len(voidPkgs) == 0 && len(aurPkgs) == 0 && len(flatApps) == 0 {
+		where := "Void's repos or the AUR"
+		if haveFlatpak {
+			where = "Void's repos, the AUR or Flathub"
+		}
+		ui.Info("no results for '%s' in %s", term, where)
+		return nil
+	}
+	if len(flatApps) > 0 {
+		ui.Info("install a Flatpak with its full ID, e.g. vpa install %s", flatApps[0].ID)
 	}
 	return nil
 }
@@ -104,6 +130,12 @@ func (a *App) cmdInfo(args []string) error {
 		return fmt.Errorf("usage: vpa info <pkg>")
 	}
 	name := args[0]
+
+	// A reverse-DNS app ID only ever means a Flatpak.
+	if flatpak.LooksLikeAppID(name) && flatpak.Available() {
+		fmt.Printf("%s\n", ui.Bold("flatpak/"+name))
+		return flatpak.Info(name)
+	}
 
 	inVoid := xbpsutil.IsInVoidRepos(name)
 	if inVoid {
@@ -162,13 +194,20 @@ func (a *App) cmdInstall(pkgs []string) error {
 		return fmt.Errorf("usage: vpa install <pkg> [pkg...]")
 	}
 
-	var xbpsFileArgs, foreignArgs, voidArgs, aurArgs []string
+	var xbpsFileArgs, foreignArgs, voidArgs, aurArgs, flatArgs []string
 	for _, p := range pkgs {
 		switch {
 		case isXbpsFileArg(p):
 			xbpsFileArgs = append(xbpsFileArgs, p)
 		case isForeignPkgArg(p):
 			foreignArgs = append(foreignArgs, p)
+		case a.Cfg.PreferFlatpak || flatpak.LooksLikeAppID(p):
+			// A reverse-DNS app ID is unambiguous (nothing in Void's repos
+			// or the AUR is named that way), so it needs no flag. Otherwise
+			// Flatpak is only used when --flatpak asks for it: silently
+			// installing a sandboxed bundle when a native package exists
+			// would be a surprising thing to do behind someone's back.
+			flatArgs = append(flatArgs, p)
 		case xbpsutil.IsInVoidRepos(p):
 			// A real Void package -- no PKGBUILD, no AUR involved, so go
 			// straight to xbps-install. Note this deliberately checks Void's
@@ -178,6 +217,15 @@ func (a *App) cmdInstall(pkgs []string) error {
 			voidArgs = append(voidArgs, p)
 		default:
 			aurArgs = append(aurArgs, p)
+		}
+	}
+	if len(flatArgs) > 0 {
+		if !flatpak.Available() {
+			return fmt.Errorf("flatpak isn't installed -- run 'vpa install flatpak' first")
+		}
+		ui.Info("installing from Flathub: %s", strings.Join(flatArgs, " "))
+		if err := flatpak.Install(ui.NoConfirm, flatArgs...); err != nil {
+			return fmt.Errorf("flatpak install failed: %w", err)
 		}
 	}
 	for _, f := range xbpsFileArgs {
@@ -215,6 +263,14 @@ func (a *App) cmdInstall(pkgs []string) error {
 	sysutil.RequireBin("git", "git")
 	sysutil.RequireBin("fakeroot", "fakeroot")
 	sysutil.RequireBin("xbps-create", "xbps")
+	// PKGBUILD build()/package() bodies routinely shell out to tar with
+	// zstd/xz/bzip2 compression -- makepkg's environment assumes these
+	// exist (they're part of base-devel on Arch), and without them a build
+	// fails deep inside package() with a bare "Cannot exec" from tar.
+	sysutil.RequireBin("bsdtar", "bsdtar")
+	sysutil.RequireBin("zstd", "zstd")
+	sysutil.RequireBin("xz", "xz")
+	sysutil.RequireBin("bzip2", "bzip2")
 
 	infos, err := aurapi.Info(aurArgs...)
 	if err != nil {
@@ -416,6 +472,30 @@ func (a *App) cmdRemove(pkgs []string) error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("usage: vpa remove <pkg> [pkg...]")
 	}
+
+	// An installed Flatpak lives in Flatpak's database, not xbps's, so it
+	// has to be removed with flatpak or xbps-remove would just say it isn't
+	// installed.
+	if flatpak.Available() {
+		var flat, rest []string
+		for _, p := range pkgs {
+			if flatpak.IsInstalled(p) && !xbpsutil.IsInstalled(p) {
+				flat = append(flat, p)
+			} else {
+				rest = append(rest, p)
+			}
+		}
+		if len(flat) > 0 {
+			ui.Info("removing Flatpak: %s", strings.Join(flat, " "))
+			if err := flatpak.Remove(ui.NoConfirm, flat...); err != nil {
+				return fmt.Errorf("flatpak uninstall failed: %w", err)
+			}
+		}
+		if len(rest) == 0 {
+			return nil
+		}
+		pkgs = rest
+	}
 	if err := xbpsutil.Remove(pkgs...); err != nil {
 		return err
 	}
@@ -462,12 +542,19 @@ func (a *App) cmdUpdate() error {
 		}
 	}
 
+	if flatpak.Available() {
+		ui.Info("updating Flatpak applications...")
+		if err := flatpak.Update(ui.NoConfirm); err != nil {
+			ui.Warn("flatpak update failed: %v", err)
+		}
+	}
+
 	m, err := manifest.Load(a.Cfg.ManifestFile)
 	if err != nil {
 		return err
 	}
 	if m.Empty() {
-		ui.Info("nothing tracked by vpa yet")
+		ui.Info("no AUR packages tracked by vpa yet")
 		return nil
 	}
 
@@ -545,6 +632,14 @@ func (a *App) cmdClean() error {
 		}
 		ui.Ok("cleared %s", a.Cfg.RepoDir)
 	}
+	// Unused Flatpak runtimes are where the disk space usually is.
+	if flatpak.Available() {
+		if ui.Confirm("Also remove Flatpak runtimes nothing still needs?") {
+			if err := flatpak.RemoveUnused(ui.NoConfirm); err != nil {
+				ui.Warn("removing unused Flatpak runtimes failed: %v", err)
+			}
+		}
+	}
 	ui.Ok("cleaned")
 	return nil
 }
@@ -590,6 +685,13 @@ func (a *App) cmdList(args []string) error {
 		return fmt.Errorf("couldn't list installed packages: %w", err)
 	}
 	sort.Slice(installed, func(i, j int) bool { return installed[i].Name < installed[j].Name })
+	if flatpak.Available() {
+		if apps, err := flatpak.List(); err == nil {
+			for _, app := range apps {
+				fmt.Printf("%-40s %s (flatpak)\n", app.ID, app.Version)
+			}
+		}
+	}
 	for _, p := range installed {
 		tag := ""
 		if e, ok := m.Get(p.Name); ok {

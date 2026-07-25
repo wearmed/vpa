@@ -98,15 +98,44 @@ func TestAnyNonSkip(t *testing.T) {
 	}
 }
 
-func TestHasTarSuffix(t *testing.T) {
-	for _, f := range []string{"a.tar", "a.tar.gz", "a.tgz", "a.tar.xz", "a.tar.zst", "a.tar.bz2"} {
-		if !hasTarSuffix(f) {
-			t.Errorf("hasTarSuffix(%q) = false", f)
+// Regression: a PKGBUILD whose source is a .deb (or .rpm) expects it
+// already unpacked in $srcdir -- iriunwebcam-bin's package() reads
+// data.tar.zst straight out of the .deb. Only handling .tar*/.zip left
+// those sources untouched and the build failed.
+func TestIsExtractableCoversForeignPackages(t *testing.T) {
+	yes := []string{
+		"iriunwebcam-2.9.1.deb",
+		"hello-2.12.3-1.fc44.x86_64.rpm",
+		"licenses-20240728-1-any.pkg.tar.zst",
+		"v1.2.3.tar.gz", "src.tgz", "a.tar.xz", "a.tar.zst", "a.tar.bz2",
+		"a.zip", "a.7z", "a.cpio", "a.iso", "a.jar",
+		"manpage.1.gz", "blob.xz",
+		"UPPER.TAR.GZ",
+	}
+	for _, f := range yes {
+		if !isExtractable(f) {
+			t.Errorf("isExtractable(%q) = false, want true", f)
 		}
 	}
-	for _, f := range []string{"a.zip", "a.txt", "a.tar.gz.sig", ""} {
-		if hasTarSuffix(f) {
-			t.Errorf("hasTarSuffix(%q) = true", f)
+
+	// These must be left exactly as downloaded.
+	no := []string{
+		"fix-build.patch", "app.desktop", "launcher.sh", "config.conf",
+		"LICENSE.iriun.txt", "README.md", "some.service", "", "plainfile",
+	}
+	for _, f := range no {
+		if isExtractable(f) {
+			t.Errorf("isExtractable(%q) = true, want false", f)
 		}
+	}
+}
+
+func TestNoExtractIsHonoured(t *testing.T) {
+	pb := &pkgbuild.PKGBUILD{NoExtract: []string{"keep.tar.gz"}}
+	if !isNoExtract(pb, "keep.tar.gz") {
+		t.Error("noextract entry not honoured")
+	}
+	if isNoExtract(pb, "other.tar.gz") {
+		t.Error("unrelated file wrongly marked noextract")
 	}
 }
