@@ -37,18 +37,33 @@ OPTIONS:
 --help                         - Show this message, or a subcommand's own
                                   usage if one was given (e.g. vpa install --help)
 
-SUBCOMMANDS:
-search (s) <term>             - Search the AUR
-info <pkg>                     - Show information about <package>
-install (i) <pkg(s)>           - Build and install <package(s)> from the AUR
-                                  (no exact match opens an interactive
-                                  numbered picker over the search results)
-remove (rm) <pkg(s)>            - Remove <package(s)> (via xbps-remove)
-update (up, upgrade, su)       - Update everything: vpa itself (if a newer
-                                  version exists), a full system upgrade,
-                                  then any vpa-tracked AUR package
-clean (cl)                     - Wipe the build cache and local package repo
-list (ls)                      - List packages vpa has installed
+PACKAGES:
+search (s) <term>             - Search Void's repos and the AUR together
+info <pkg>                     - Show details from Void's repos and/or AUR
+install (i) <pkg(s)>           - Install from Void's repos, the AUR, or a
+                                  local/remote .xbps/.deb/.rpm/.pkg.tar.zst
+                                  file (no exact match opens a picker)
+remove (rm) <pkg(s)>            - Remove <package(s)>
+update (up, upgrade, su)       - Update everything: vpa itself, a full
+                                  system upgrade, then AUR packages
+list (ls) [--aur]              - List installed packages (--aur: only ones
+                                  vpa built from the AUR)
+
+QUERYING:
+files (fl) <pkg>              - List the files a package owns
+owns (wp) <file>               - Show which package owns a file
+deps <pkg>                     - Show a package's dependencies
+revdeps (rv) <pkg>             - Show what depends on a package
+orphans                         - List no-longer-needed dependencies
+repos (lr)                     - List configured repositories
+
+MAINTENANCE:
+autoremove (ar)               - Remove orphaned packages
+reconfigure (rc) <pkg|all>     - Re-run a package's configuration step
+hold [pkg(s)]                  - Hold packages back from updates (or list)
+unhold <pkg(s)>                - Release held packages
+clean (cl)                     - Wipe build/package caches
+
 help (h, ?)                    - Show this message, or run 'vpa help <cmd>'
                                   for a subcommand's own usage
 helppager (hp)                 - Show usage information (piped to $PAGER)
@@ -197,7 +212,27 @@ func main() {
 	case "clean":
 		runErr = app.cmdClean()
 	case "list":
-		runErr = app.cmdList()
+		runErr = app.cmdList(rest)
+	case "files":
+		runErr = app.cmdFiles(rest)
+	case "owns":
+		runErr = app.cmdOwns(rest)
+	case "deps":
+		runErr = app.cmdDeps(rest)
+	case "revdeps":
+		runErr = app.cmdRevDeps(rest)
+	case "orphans":
+		runErr = app.cmdOrphans()
+	case "autoremove":
+		runErr = app.cmdAutoremove()
+	case "reconfigure":
+		runErr = app.cmdReconfigure(rest)
+	case "repos":
+		runErr = app.cmdRepos()
+	case "hold":
+		runErr = app.cmdHold(rest)
+	case "unhold":
+		runErr = app.cmdUnhold(rest)
 	case "helppager":
 		helpPager()
 	default:

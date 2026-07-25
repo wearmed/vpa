@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -216,3 +217,180 @@ func Remove(pkgs ...string) error {
 	}
 	return nil
 }
+
+// RepoPackage is one result from a repository search.
+type RepoPackage struct {
+	Name      string
+	Version   string
+	Desc      string
+	Installed bool
+}
+
+// searchLineRe parses xbps-query -Rs output: "[*] name-1.2.3_1  description",
+// where [*] means installed and [-] means available. The name/version split
+// is left to xbps-uhelper rather than guessed, since pkgnames can contain
+// dashes and digits.
+var searchLineRe = regexp.MustCompile(`^\[([*-])\]\s+(\S+)\s*(.*)$`)
+
+// SearchRepos searches Void's configured repositories (plus repoDir).
+func SearchRepos(term, repoDir string) ([]RepoPackage, error) {
+	out, err := sysutil.Output("xbps-query", "-Rs", term, "--repository="+repoDir)
+	if err != nil {
+		// xbps-query exits non-zero when nothing matched; that's not an error.
+		return nil, nil
+	}
+
+	var pkgvers []string
+	var raw [][3]string // marker, pkgver, desc
+	for _, line := range strings.Split(out, "\n") {
+		m := searchLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		raw = append(raw, [3]string{m[1], m[2], strings.TrimSpace(m[3])})
+		pkgvers = append(pkgvers, m[2])
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	names, err := sysutil.Output("xbps-uhelper", append([]string{"getpkgname"}, pkgvers...)...)
+	if err != nil {
+		return nil, err
+	}
+	nameList := strings.Split(strings.TrimRight(names, "\n"), "\n")
+	if len(nameList) != len(raw) {
+		return nil, fmt.Errorf("search/getpkgname line count mismatch (%d vs %d)", len(raw), len(nameList))
+	}
+
+	pkgs := make([]RepoPackage, 0, len(raw))
+	for i, r := range raw {
+		version := strings.TrimPrefix(r[1], nameList[i]+"-")
+		pkgs = append(pkgs, RepoPackage{
+			Name:      nameList[i],
+			Version:   version,
+			Desc:      r[2],
+			Installed: r[0] == "*",
+		})
+	}
+	return pkgs, nil
+}
+
+// ShowRepo prints full metadata for a package from the repositories.
+func ShowRepo(name, repoDir string) error {
+	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-S", name)
+}
+
+// ExistsInRepos reports whether name resolves in Void's repos or repoDir.
+func ExistsInRepos(name, repoDir string) bool {
+	return IsAvailable(name, repoDir)
+}
+
+// ListInstalled returns every installed package name, in xbps's own order.
+// Both the name and version come out of the same two commands here (one
+// listing, one batched name-split) rather than querying per package --
+// with ~1200 installed packages, per-package subprocesses turn an instant
+// listing into a minutes-long one.
+func ListInstalled() ([]InstalledPackage, error) {
+	out, err := sysutil.Output("xbps-query", "-l")
+	if err != nil {
+		return nil, err
+	}
+	var pkgvers []string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		pkgvers = append(pkgvers, fields[1])
+	}
+	if len(pkgvers) == 0 {
+		return nil, nil
+	}
+	resolved, err := sysutil.Output("xbps-uhelper", append([]string{"getpkgname"}, pkgvers...)...)
+	if err != nil {
+		return nil, err
+	}
+	nameList := strings.Split(strings.TrimRight(resolved, "\n"), "\n")
+	if len(nameList) != len(pkgvers) {
+		return nil, fmt.Errorf("list/getpkgname line count mismatch (%d vs %d)", len(pkgvers), len(nameList))
+	}
+
+	pkgs := make([]InstalledPackage, 0, len(pkgvers))
+	for i, pv := range pkgvers {
+		pkgs = append(pkgs, InstalledPackage{
+			Name:    nameList[i],
+			Version: strings.TrimPrefix(pv, nameList[i]+"-"),
+		})
+	}
+	return pkgs, nil
+}
+
+// InstalledPackage is one entry from ListInstalled.
+type InstalledPackage struct {
+	Name    string
+	Version string
+}
+
+// Files lists the files a package owns, falling back to repository data
+// when the package isn't installed locally (xbps-query -f is local-only,
+// but -R answers the same question for anything in the repos).
+func Files(name, repoDir string) error {
+	if IsInstalled(name) {
+		return sysutil.RunInteractive("xbps-query", "-f", name)
+	}
+	if !IsAvailable(name, repoDir) {
+		return fmt.Errorf("package '%s' isn't installed and isn't in any configured repository", name)
+	}
+	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-f", name)
+}
+
+// Owns finds which package owns a file.
+func Owns(path string) error { return sysutil.RunInteractive("xbps-query", "-o", path) }
+
+// Deps lists a package's dependencies.
+func Deps(name, repoDir string) error {
+	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-x", name)
+}
+
+// RevDeps lists what depends on a package.
+func RevDeps(name, repoDir string) error {
+	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-X", name)
+}
+
+// Orphans lists packages installed only as dependencies and no longer needed.
+func Orphans() error { return sysutil.RunInteractive("xbps-query", "-O") }
+
+// Autoremove removes orphaned packages.
+func Autoremove(noconfirm bool) error {
+	args := []string{"xbps-remove", "-o"}
+	if noconfirm {
+		args = append(args, "-y")
+	}
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// Reconfigure re-runs a package's configuration step ("all" for everything).
+func Reconfigure(name string) error {
+	if name == "all" {
+		return sysutil.RunInteractive("sudo", "xbps-reconfigure", "-a")
+	}
+	return sysutil.RunInteractive("sudo", "xbps-reconfigure", "-f", name)
+}
+
+// Repos lists the configured repositories.
+func Repos() error { return sysutil.RunInteractive("xbps-query", "-L") }
+
+// Hold marks packages as held back from updates; Unhold reverses it.
+func Hold(names []string) error {
+	args := append([]string{"xbps-pkgdb", "-m", "hold"}, names...)
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+func Unhold(names []string) error {
+	args := append([]string{"xbps-pkgdb", "-m", "unhold"}, names...)
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// ListHeld lists packages currently on hold.
+func ListHeld() error { return sysutil.RunInteractive("xbps-query", "-H") }

@@ -29,38 +29,104 @@ func (a *App) gitDir(pkgbase string) string {
 	return buildpkg.NewDirs(a.Cfg.BuildDir, pkgbase).Git
 }
 
+// cmdSearch searches Void's own repositories and the AUR together, since
+// from a user's point of view "what can I install called X" spans both.
+// Void results come first: a native package is nearly always the better
+// choice when one exists.
 func (a *App) cmdSearch(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: vpa search <term>")
 	}
-	pkgs, err := aurapi.Search(args[0])
-	if err != nil {
-		return fmt.Errorf("AUR search request failed: %w", err)
+	term := args[0]
+
+	// Both lookups are independent; run them together so the AUR round trip
+	// doesn't serialize behind the local one.
+	var (
+		voidPkgs []xbpsutil.RepoPackage
+		aurPkgs  []aurapi.Package
+		voidErr  error
+		aurErr   error
+		wg       sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); voidPkgs, voidErr = xbpsutil.SearchRepos(term, a.Cfg.RepoDir) }()
+	go func() { defer wg.Done(); aurPkgs, aurErr = aurapi.Search(term) }()
+	wg.Wait()
+
+	if voidErr != nil {
+		ui.Warn("Void repository search failed: %v", voidErr)
 	}
-	if len(pkgs) == 0 {
-		ui.Info("no AUR results for '%s'", args[0])
-		return nil
+	if aurErr != nil {
+		ui.Warn("AUR search failed: %v", aurErr)
 	}
-	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
-	for _, p := range pkgs {
-		fmt.Printf("%s %s\n", ui.Bold("aur/"+p.Name), p.Version)
-		fmt.Printf("    %s\n", p.Description)
+
+	sort.Slice(voidPkgs, func(i, j int) bool { return voidPkgs[i].Name < voidPkgs[j].Name })
+	for _, p := range voidPkgs {
+		mark := ""
+		if p.Installed {
+			mark = " [installed]"
+		}
+		fmt.Printf("%s %s%s\n", ui.Bold("void/"+p.Name), p.Version, mark)
+		if p.Desc != "" {
+			fmt.Printf("    %s\n", p.Desc)
+		}
+	}
+
+	sort.Slice(aurPkgs, func(i, j int) bool { return aurPkgs[i].Name < aurPkgs[j].Name })
+	for _, p := range aurPkgs {
+		mark := ""
+		if xbpsutil.IsInstalled(p.Name) {
+			mark = " [installed]"
+		}
+		fmt.Printf("%s %s%s\n", ui.Bold("aur/"+p.Name), p.Version, mark)
+		if p.Description != "" {
+			fmt.Printf("    %s\n", p.Description)
+		}
+	}
+
+	if len(voidPkgs) == 0 && len(aurPkgs) == 0 {
+		ui.Info("no results for '%s' in Void's repos or the AUR", term)
 	}
 	return nil
 }
 
+// cmdInfo shows details for a package from wherever it exists -- Void's
+// repos, the AUR, or both (a name can legitimately exist in each, and
+// seeing both is the point).
 func (a *App) cmdInfo(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: vpa info <pkg>")
 	}
-	pkgs, err := aurapi.Info(args[0])
+	name := args[0]
+
+	inVoid := xbpsutil.ExistsInRepos(name, a.Cfg.RepoDir)
+	if inVoid {
+		fmt.Printf("%s\n", ui.Bold("void/"+name))
+		if err := xbpsutil.ShowRepo(name, a.Cfg.RepoDir); err != nil {
+			ui.Warn("couldn't read Void package info: %v", err)
+		}
+	}
+
+	pkgs, err := aurapi.Info(name)
 	if err != nil {
+		if inVoid {
+			ui.Warn("AUR lookup failed: %v", err)
+			return nil
+		}
 		return fmt.Errorf("AUR info request failed: %w", err)
 	}
-	p, ok := aurapi.ByName(pkgs, args[0])
+	p, ok := aurapi.ByName(pkgs, name)
 	if !ok {
-		return fmt.Errorf("package '%s' not found in AUR", args[0])
+		if inVoid {
+			return nil // found in Void's repos, just not on the AUR
+		}
+		return fmt.Errorf("package '%s' not found in Void's repos or the AUR", name)
 	}
+
+	if inVoid {
+		fmt.Println()
+	}
+	fmt.Printf("%s\n", ui.Bold("aur/"+name))
 	lastMod := time.Unix(p.LastModified, 0).UTC().Format("2006-01-02T15:04:05Z")
 	fmt.Printf("Name           : %s\n", p.Name)
 	fmt.Printf("PackageBase    : %s\n", p.PackageBase)
@@ -436,27 +502,56 @@ func (a *App) cmdClean() error {
 	return nil
 }
 
-func (a *App) cmdList() error {
+// cmdList lists every installed package on the system, tagging the ones
+// vpa built from the AUR. `--aur` narrows it to just those.
+func (a *App) cmdList(args []string) error {
 	m, err := manifest.Load(a.Cfg.ManifestFile)
 	if err != nil {
 		return err
 	}
-	if m.Empty() {
-		ui.Info("nothing tracked by vpa")
+
+	aurOnly := false
+	for _, arg := range args {
+		if arg == "--aur" || arg == "-a" {
+			aurOnly = true
+		}
+	}
+
+	if aurOnly {
+		if m.Empty() {
+			ui.Info("vpa hasn't built any AUR packages yet")
+			return nil
+		}
+		names := make([]string, 0, len(m.Entries))
+		for name := range m.Entries {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			e := m.Entries[name]
+			devel := ""
+			if e.Commit != "" {
+				devel = "(devel)"
+			}
+			fmt.Printf("%-30s %-15s %s\n", name, e.Version, devel)
+		}
 		return nil
 	}
-	names := make([]string, 0, len(m.Entries))
-	for name := range m.Entries {
-		names = append(names, name)
+
+	installed, err := xbpsutil.ListInstalled()
+	if err != nil {
+		return fmt.Errorf("couldn't list installed packages: %w", err)
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		e := m.Entries[name]
-		devel := ""
-		if e.Commit != "" {
-			devel = "(devel)"
+	sort.Slice(installed, func(i, j int) bool { return installed[i].Name < installed[j].Name })
+	for _, p := range installed {
+		tag := ""
+		if e, ok := m.Get(p.Name); ok {
+			tag = " (aur)"
+			if e.Commit != "" {
+				tag = " (aur, devel)"
+			}
 		}
-		fmt.Printf("%-30s %-15s %s\n", name, e.Version, devel)
+		fmt.Printf("%-40s %s%s\n", p.Name, p.Version, tag)
 	}
 	return nil
 }

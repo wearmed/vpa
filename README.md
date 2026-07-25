@@ -29,14 +29,28 @@ Every operation is reachable three ways — the full name, a short alias, or
 pacman syntax:
 
 ```
-vpa search  (s)  <term>      -Ss     search
-vpa info         <pkg>       -Si     package details
-vpa install (i)  <pkg>...    -S      install
+PACKAGES
+vpa search  (s)  <term>      -Ss     search Void's repos + the AUR
+vpa info         <pkg>       -Si     details from Void's repos and/or AUR
+vpa install (i)  <pkg>...    -S      install from anywhere
 vpa remove  (rm) <pkg>...    -R      remove
 vpa update  (up)             -Syu    update everything
-vpa list    (ls)             -Q      list installed
-vpa clean   (cl)             -Sc     clean caches
-vpa help    (h, ?)                   show usage
+vpa list    (ls) [--aur]     -Q      list installed
+
+QUERYING
+vpa files   (fl) <pkg>       -Ql     files a package owns
+vpa owns    (wp) <file>      -Qo     which package owns a file
+vpa deps         <pkg>               a package's dependencies
+vpa revdeps (rv) <pkg>               what depends on a package
+vpa orphans                  -Qdt    no-longer-needed dependencies
+vpa repos   (lr)                     configured repositories
+
+MAINTENANCE
+vpa autoremove  (ar)                 remove orphaned packages
+vpa reconfigure (rc) <pkg|all>       re-run configuration
+vpa hold / unhold    <pkg>...        hold packages back from updates
+vpa clean       (cl)         -Sc     clean build/package caches
+vpa help        (h, ?)               show usage
 ```
 
 `vpa`, `vpa help`, `vpa h` and `vpa ?` all show the general help. Every
@@ -53,6 +67,16 @@ subcommand has its own usage text too — `vpa help install`, `vpa install
   a real `.xbps` (packaging only — it can't fix ABI differences between
   distros, so whether a foreign binary actually runs depends on how
   compatible it happens to be with Void's glibc)
+
+### Searching and listing
+
+`vpa search` covers Void's repositories and the AUR in one pass, listing
+Void results first (a native package is nearly always the better choice when
+one exists) and marking anything already installed. `vpa info` works the
+same way, showing a package from whichever side it exists on — or both.
+
+`vpa list` shows every installed package on the system, tagging the ones vpa
+built from the AUR; `vpa list --aur` narrows it to just those.
 
 ### `vpa update`
 
