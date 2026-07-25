@@ -169,4 +169,4 @@ turned into someone else's closed-source product.
 
 ---
 
-And yes, I used Claude to write this README. I wasn't about to type all that.
+used claude to make this readme, i aint typing allat
