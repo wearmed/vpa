@@ -62,6 +62,8 @@ func canonicalCommand(name string) string {
 		return "help"
 	case "helppager", "hp":
 		return "helppager"
+	case "version":
+		return "version"
 	default:
 		return ""
 	}
@@ -103,7 +105,10 @@ its full app ID, or pass --flatpak.
   vpa install pipes.sh
   vpa install ./something.deb
   vpa install org.mozilla.firefox
-  vpa install --flatpak obs-studio
+  vpa install --flatpak gimp
+
+With --flatpak you can use a short name; vpa looks it up on Flathub and
+asks which one you meant if it's ambiguous.
 
 Options: --edit (edit an AUR build script first), --flatpak, --noconfirm
 `,
@@ -233,6 +238,10 @@ you no longer need. Safe to run whenever.
 
 Stop packages being updated by 'vpa update'. With no arguments, shows
 what's currently held.
+`,
+	"version": `vpa version
+
+Show which version of vpa this is. Same as 'vpa --version'.
 `,
 	"unhold": `vpa unhold <pkg> [pkg...]
 

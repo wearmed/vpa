@@ -223,9 +223,15 @@ func (a *App) cmdInstall(pkgs []string) error {
 		if !flatpak.Available() {
 			return fmt.Errorf("flatpak isn't installed -- run 'vpa install flatpak' first")
 		}
-		ui.Info("installing from Flathub: %s", strings.Join(flatArgs, " "))
-		if err := flatpak.Install(ui.NoConfirm, flatArgs...); err != nil {
-			return fmt.Errorf("flatpak install failed: %w", err)
+		ids, err := resolveFlatpakNames(flatArgs)
+		if err != nil {
+			return err
+		}
+		if len(ids) > 0 {
+			ui.Info("installing from Flathub: %s", strings.Join(ids, " "))
+			if err := flatpak.Install(ui.NoConfirm, ids...); err != nil {
+				return fmt.Errorf("flatpak install failed: %w", err)
+			}
 		}
 	}
 	for _, f := range xbpsFileArgs {
@@ -479,10 +485,20 @@ func (a *App) cmdRemove(pkgs []string) error {
 	if flatpak.Available() {
 		var flat, rest []string
 		for _, p := range pkgs {
-			if flatpak.IsInstalled(p) && !xbpsutil.IsInstalled(p) {
+			// Route on "is this a Flatpak's name" rather than "is it
+			// installed": otherwise removing an app ID that isn't installed
+			// falls through to xbps, which reports the confusing
+			// "Package org.gnome.Calculator is not currently installed".
+			isAppID := flatpak.LooksLikeAppID(p) && !xbpsutil.IsInstalled(p)
+			if (flatpak.IsInstalled(p) && !xbpsutil.IsInstalled(p)) || isAppID {
 				flat = append(flat, p)
 			} else {
 				rest = append(rest, p)
+			}
+		}
+		for _, p := range flat {
+			if !flatpak.IsInstalled(p) {
+				return fmt.Errorf("no Flatpak called %q is installed", p)
 			}
 		}
 		if len(flat) > 0 {

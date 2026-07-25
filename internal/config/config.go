@@ -113,6 +113,8 @@ func (c *Config) loadFile() error {
 			c.NoConfirm = val == "1"
 		case "TRUST_AUR":
 			c.TrustAUR = val == "1"
+		case "PREFER_FLATPAK":
+			c.PreferFlatpak = val == "1"
 		case "EDIT_PKGBUILD":
 			c.EditPKGBUILD = val == "1"
 		case "DEVEL":

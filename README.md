@@ -52,6 +52,7 @@ vpa reconfigure (rc) <pkg|all>   re-run a package's setup step
 vpa hold / unhold <pkg>...       stop packages being updated
 
 REPOSITORIES AND ALTERNATIVES
+vpa version                      show which version this is
 vpa listrepos (lr)               show configured repositories
 vpa addrepo <url>                add another repository
 vpa listalternatives (la)        show configurable defaults
@@ -123,8 +124,9 @@ asked.
 Anywhere on the command line: `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
 `--edit` (open PKGBUILD in `$EDITOR` first), `--devel` (also rebuild `-git`
 packages when upstream moved but `pkgver` didn't), `--flatpak` (install the
-named packages from Flathub), `--parallel=<N>` (concurrent source downloads,
-default 4). All persist in
+named packages from Flathub; short names are looked up, and it asks if
+they're ambiguous), `--parallel=<N>` (concurrent source downloads, default
+4), `--version`/`-V`. All persist in
 `~/.config/vpa/vpa.conf` (`PARALLEL_DOWNLOADS=N` for the last one).
 
 ```sh

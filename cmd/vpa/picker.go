@@ -39,9 +39,7 @@ func interactiveSelectPkg(term string) ([]string, error) {
 	}
 
 	fmt.Fprint(os.Stderr, "packages to install (e.g. '1 3 5-7', enter to cancel): ")
-	reader := bufio.NewReader(os.Stdin)
-	line, _ := reader.ReadString('\n')
-	line = strings.TrimSpace(line)
+	line := readLine()
 	if line == "" {
 		return nil, nil
 	}
@@ -104,4 +102,12 @@ func parseSelection(line string, n int) (indices []int, invalid []string) {
 		add(idx)
 	}
 	return indices, invalid
+}
+
+// readLine reads one trimmed line from stdin, shared by the AUR and
+// Flathub pickers.
+func readLine() string {
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	return strings.TrimSpace(line)
 }

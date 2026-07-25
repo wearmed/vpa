@@ -13,6 +13,9 @@ import (
 	"vpa/internal/ui"
 )
 
+// Version is bumped by +0.1 for a feature release and +0.01 for a bugfix.
+const Version = "1.11"
+
 func usageText() string {
 	return `vpa - Void Package Assistant
 the only Void package manager you'll need
@@ -51,7 +54,7 @@ func usageFullText() string {
 	}
 	return fmt.Sprintf(`vpa - Void Package Assistant
 the only Void package manager you'll need
-XBPS version: %s
+vpa version: %s   XBPS version: %s
 
 USAGE:
 vpa [OPTIONS] <COMMAND> [ARGS]
@@ -107,11 +110,13 @@ OPTIONS:
 --flatpak                     - Install the named packages from Flathub
 --parallel=<N>                - Concurrent downloads (default: 4)
 --color=<yes|no|auto>         - Colored output (default: auto)
+--version, -V                 - Show which version of vpa this is
 --help                        - Show help, or a command's own help
 
 CONFIG FILE:
-~/.config/vpa/vpa.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1)
-`, xbpsVer)
+~/.config/vpa/vpa.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1,
+                        TRUST_AUR=1, PREFER_FLATPAK=1, PARALLEL_DOWNLOADS=N)
+`, Version, xbpsVer)
 }
 
 func usage() {
@@ -176,6 +181,9 @@ func main() {
 			if n, err := strconv.Atoi(strings.TrimPrefix(a, "--parallel=")); err == nil && n > 0 {
 				cfg.Parallel = n
 			}
+		case a == "--version" || a == "-V":
+			fmt.Printf("vpa %s\n", Version)
+			return
 		case a == "--help" || a == "-h":
 			wantHelp = true
 		case a == "--all":
@@ -292,6 +300,8 @@ func main() {
 		runErr = app.cmdHold(rest)
 	case "unhold":
 		runErr = requireArgs(cmd, rest, app.cmdUnhold)
+	case "version":
+		fmt.Printf("vpa %s\n", Version)
 	case "helppager":
 		helpPager()
 	default:
