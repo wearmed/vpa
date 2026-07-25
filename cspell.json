@@ -66,6 +66,8 @@
     "gitutil",
     "systemdcheck",
     "cgo",
-    "resultcount"
+    "resultcount",
+    "paru",
+    "pikaur"
   ]
 }

@@ -2,12 +2,17 @@
 
 **V**oid **U**ser **R**epository — an AUR helper for Void Linux.
 
-Fetches PKGBUILDs from the [AUR](https://aur.archlinux.org), builds them, and
-packages the result as a real `.xbps` via `xbps-create` — tracked and cleanly
-removable through `xbps`, not just dumped onto the filesystem. Written in Go,
-ships as a single static binary (no `jq`, no shell library to keep in sync).
-PKGBUILDs are themselves bash, so building still shells out to `bash`/`git`/
-`fakeroot`/`xbps-*` — Go just handles orchestration, JSON, and packaging.
+Void doesn't have anything like the AUR, but a lot of software only ships as
+a PKGBUILD. `vur` grabs those from the AUR, builds them, and turns the result
+into a real `.xbps` package via `xbps-create`, so it ends up tracked and
+removable through `xbps` like anything else — not just files thrown onto
+your filesystem by a `make install`.
+
+It's written in Go and ships as one static binary, so there's no `jq` to
+install and no pile of shell scripts to keep in sync. That said, a PKGBUILD
+is just bash, so building one still means shelling out to `bash`, `git`,
+`fakeroot`, and `xbps-*` under the hood — Go is mostly there to make the
+orchestration, JSON handling, and distribution less painful.
 
 ## Install
 
@@ -17,13 +22,14 @@ cd vur
 ./install.sh
 ```
 
-Checks you're on Void, installs `go`/`git`/`curl`/`fakeroot` if missing,
-builds a static binary, and symlinks it into `~/.local/bin` (`--system` for
-`/usr/local/bin`). Safe to re-run.
+It'll check you're actually on Void, grab `go`/`git`/`curl`/`fakeroot` if
+you're missing any of them, build the binary, and symlink it into
+`~/.local/bin` (pass `--system` for `/usr/local/bin` instead). Fine to
+re-run whenever.
 
 ## Usage
 
-Short aliases, `vpm`-style: `vur [OPTIONS] [SUBCOMMAND] [<ARGS>]`
+Aliases are short, `vpm`-style: `vur [OPTIONS] [SUBCOMMAND] [<ARGS>]`
 
 ```
 vur search  (s)  <term>            search the AUR
@@ -35,13 +41,16 @@ vur clean   (cl)                   wipe the build cache and local package repo
 vur list    (ls)                   list packages vur has installed
 ```
 
-Flags (anywhere on the command line): `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
-`--edit` (open PKGBUILD in `$EDITOR` first), `--devel` (also rebuild `-git`
-packages on `upgrade` when upstream moved but `pkgver` didn't). Persistent
-versions live in `~/.config/vur/vur.conf`.
+Flags work anywhere on the line: `--color=<yes|no|auto>`, `--noconfirm`/`-y`,
+`--edit` (pop the PKGBUILD open in `$EDITOR` before building), `--devel`
+(also rebuild `-git` packages on `upgrade` if upstream moved even though
+`pkgver` didn't). If you don't want to type these every time, they've all
+got a home in `~/.config/vur/vur.conf` too.
 
-`vur install <term>` with no exact match opens a numbered picker over the
-search results (e.g. `1 3 5-7`), most popular result gets the highest number.
+If you type something that isn't an exact package name, `vur install`
+just opens a numbered picker over the search results instead of giving up
+(`1 3 5-7` works for picking a few at once) — the most popular match gets
+the number that's easiest to reach.
 
 ```sh
 vur i pipes.sh
@@ -52,27 +61,32 @@ vur rm pipes.sh
 
 ## How it works
 
-1. Resolves the package's `PackageBase` via the AUR RPC and clones its git repo.
-2. Shows the full `PKGBUILD` (diffed against the last reviewed copy if
-   unchanged) and asks for confirmation before ever sourcing it — same trust
-   model as yay/paru/pikaur. `--edit` lets you change it first.
-3. Resolves `depends`/`makedepends` against Void's xbps repos, using
-   `depmap.conf` to bridge Arch/Void naming drift (e.g. `gtk2` → `gtk+`).
-   Anything AUR-only gets built recursively, with cycle detection.
-4. Downloads sources, verifies checksums, extracts archives.
-5. Runs `build()` as your user, `package()` under `fakeroot`.
-6. Packages with `xbps-create`, indexes into `~/.cache/vur/repo`, installs
-   via `xbps-install --repository=...` — no system config touched.
+1. Looks up the package's `PackageBase` on the AUR and clones its git repo.
+2. Shows you the PKGBUILD (just a diff against what you last saw, if nothing
+   changed) and won't do anything until you confirm — same trust model as
+   yay/paru/pikaur, since a PKGBUILD is arbitrary bash and there's no way
+   around that. `--edit` if you want to change something first.
+3. Works out `depends`/`makedepends` against what's actually in Void's repos,
+   using `depmap.conf` to paper over the naming differences from Arch (`gtk2`
+   → `gtk+`, that sort of thing). Anything only available on the AUR gets
+   built first, recursively, and it'll notice if you've got a dependency cycle.
+4. Grabs the sources, checks the hashes, unpacks whatever needs unpacking.
+5. Runs `build()` as you, `package()` under `fakeroot`.
+6. Hands the result to `xbps-create`, drops it in a little local repo at
+   `~/.cache/vur/repo`, and installs it from there. Doesn't touch any of
+   your actual system config to do this.
 
 ## Known limitations
 
-- `options=()` flags (`!strip`, `docs`, etc.) are ignored.
-- `.install` scriptlets are shown for review but not converted to xbps hooks.
-- No systemd-only dependency substitutes — Void has none, so `depmap.conf`
-  marks them unresolvable rather than guessing.
-- `-git` packages: `upgrade --devel` catches upstream commits moving, but a
-  PKGBUILD's dynamic `pkgver()` is never invoked, so the version string can lag.
-- Builds run serially.
+- Doesn't look at `options=()` (`!strip`, `docs`, etc.) — whatever
+  `package()` produces is what you get.
+- `.install` scriptlets get shown to you but aren't wired up as xbps hooks.
+- Won't guess at systemd-only dependencies, because Void just doesn't have
+  them — `depmap.conf` marks those as unresolvable instead of pretending.
+- For `-git` packages, `upgrade --devel` will notice upstream moved even if
+  `pkgver` stayed the same, but it never runs a PKGBUILD's `pkgver()`, so the
+  version string you see can be a bit behind what's actually installed.
+- Everything builds one at a time, nothing in parallel yet.
 
 ## License
 
