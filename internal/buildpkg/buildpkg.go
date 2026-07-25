@@ -12,7 +12,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"vur/internal/gitutil"
@@ -39,50 +42,144 @@ func NewDirs(buildDir, pkgbase string) Dirs {
 	return Dirs{Git: filepath.Join(root, "git"), Src: filepath.Join(root, "src"), Pkg: filepath.Join(root, "pkg")}
 }
 
-var httpClient = &http.Client{Timeout: 5 * time.Minute}
+// Shared transport with generous connection reuse/idle limits: multiple
+// concurrent source downloads (possibly from the same host, e.g. GitHub
+// release assets) benefit from keep-alive instead of each opening a fresh
+// TCP+TLS handshake, which is what happens with the old one-`curl`-process-
+// per-download approach this replaces.
+var httpClient = &http.Client{
+	Timeout: 30 * time.Minute,
+	Transport: &http.Transport{
+		MaxIdleConns:        64,
+		MaxIdleConnsPerHost: 16,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
 
-// FetchSources populates a fresh srcdir from pb.Source.
-func FetchSources(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs) error {
+// FetchSources populates a fresh srcdir from pb.Source, downloading/cloning
+// up to `parallel` entries at once (each source entry writes to its own
+// distinct filename, so concurrent entries can't collide). parallel < 1 is
+// treated as 1 (fully serial). Verified downloads are cached in cacheDir
+// keyed by checksum, so rebuilds (a failed build retried, `upgrade`
+// rebuilding the same version, etc.) skip re-downloading unchanged sources.
+func FetchSources(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, parallel int, cacheDir string) error {
 	os.RemoveAll(d.Src)
 	if err := os.MkdirAll(d.Src, 0o755); err != nil {
 		return err
 	}
+	if parallel < 1 {
+		parallel = 1
+	}
+	sourceCache := filepath.Join(cacheDir, "sources")
+	os.MkdirAll(sourceCache, 0o755)
+
+	// Check build-time deps once upfront rather than racing RequireBin's
+	// confirm-and-install prompt across goroutines.
+	for _, entry := range pb.Source {
+		_, url := pkgbuild.SplitSourceEntry(entry)
+		if strings.HasPrefix(url, "git+") {
+			sysutil.RequireBin("git", "git")
+		}
+	}
+
+	sem := make(chan struct{}, parallel)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(pb.Source))
 
 	for i, entry := range pb.Source {
 		if entry == "" {
 			continue
 		}
-		fname, url := pkgbuild.SplitSourceEntry(entry)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, entry string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := fetchOneSource(pkgbase, pb, d, i, entry, sourceCache); err != nil {
+				errCh <- err
+			}
+		}(i, entry)
+	}
+	wg.Wait()
+	close(errCh)
 
-		switch {
-		case strings.HasPrefix(url, "git+"):
-			if err := fetchGitSource(url, fname, d.Src); err != nil {
-				return err
-			}
-		case strings.Contains(url, "://"):
-			ui.Info("downloading %s", fname)
-			if err := download(url, filepath.Join(d.Src, fname)); err != nil {
-				return fmt.Errorf("failed to download %s: %w", fname, err)
-			}
-			if err := verifyChecksum(pb, i, fname, d.Src); err != nil {
-				return err
-			}
-			maybeExtract(pb, fname, d.Src)
-		default:
-			srcPath := filepath.Join(d.Git, url)
-			if _, err := os.Stat(srcPath); err != nil {
-				return fmt.Errorf("%s: local source '%s' not found in checkout", pkgbase, url)
-			}
-			if err := copyFile(srcPath, filepath.Join(d.Src, fname)); err != nil {
-				return err
-			}
-			if err := verifyChecksum(pb, i, fname, d.Src); err != nil {
-				return err
-			}
-			maybeExtract(pb, fname, d.Src)
-		}
+	for err := range errCh {
+		return err
 	}
 	return nil
+}
+
+func fetchOneSource(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, i int, entry, sourceCache string) error {
+	fname, url := pkgbuild.SplitSourceEntry(entry)
+
+	switch {
+	case strings.HasPrefix(url, "git+"):
+		return fetchGitSource(url, fname, d.Src)
+	case strings.Contains(url, "://"):
+		dest := filepath.Join(d.Src, fname)
+		if cached, ok := cachedSource(pb, i, sourceCache); ok {
+			if err := copyFile(cached, dest); err == nil && verifyChecksum(pb, i, fname, d.Src) == nil {
+				maybeExtract(pb, fname, d.Src)
+				return nil
+			}
+			os.Remove(dest) // cache entry didn't verify; fall through to a real download
+		}
+		ui.Info("downloading %s", fname)
+		if err := download(url, dest); err != nil {
+			return fmt.Errorf("failed to download %s: %w", fname, err)
+		}
+		if err := verifyChecksum(pb, i, fname, d.Src); err != nil {
+			return err
+		}
+		saveToCache(pb, i, dest, sourceCache)
+		maybeExtract(pb, fname, d.Src)
+	default:
+		srcPath := filepath.Join(d.Git, url)
+		if _, err := os.Stat(srcPath); err != nil {
+			return fmt.Errorf("%s: local source '%s' not found in checkout", pkgbase, url)
+		}
+		if err := copyFile(srcPath, filepath.Join(d.Src, fname)); err != nil {
+			return err
+		}
+		if err := verifyChecksum(pb, i, fname, d.Src); err != nil {
+			return err
+		}
+		maybeExtract(pb, fname, d.Src)
+	}
+	return nil
+}
+
+// sourceCacheSum returns the strongest available non-SKIP checksum for
+// source index i, used as the cache key -- same strength order as
+// verifyChecksum. Empty if none is declared (unverifiable sources are never
+// cached, since there'd be nothing safe to key them by).
+func sourceCacheSum(pb *pkgbuild.PKGBUILD, i int) string {
+	for _, sums := range [][]string{pb.Sha512sums, pb.Sha256sums, pb.B2sums, pb.Md5sums} {
+		if i < len(sums) && sums[i] != "" && sums[i] != "SKIP" {
+			return sums[i]
+		}
+	}
+	return ""
+}
+
+func cachedSource(pb *pkgbuild.PKGBUILD, i int, sourceCache string) (string, bool) {
+	sum := sourceCacheSum(pb, i)
+	if sum == "" {
+		return "", false
+	}
+	path := filepath.Join(sourceCache, sum)
+	if _, err := os.Stat(path); err != nil {
+		return "", false
+	}
+	return path, true
+}
+
+func saveToCache(pb *pkgbuild.PKGBUILD, i int, file, sourceCache string) {
+	sum := sourceCacheSum(pb, i)
+	if sum == "" {
+		return
+	}
+	copyFile(file, filepath.Join(sourceCache, sum))
 }
 
 func fetchGitSource(url, fname, srcdir string) error {
@@ -96,9 +193,45 @@ func fetchGitSource(url, fname, srcdir string) error {
 	return gitutil.CloneWorkingCopy(base, filepath.Join(srcdir, fname), ref)
 }
 
+// download fetches url to dest using a shared, connection-reusing HTTP
+// client (native Go, no per-download `curl` subprocess) with a few retries
+// for transient failures.
 func download(url, dest string) error {
-	sysutil.RequireBin("curl", "curl")
-	return sysutil.RunQuiet("curl", "-fL", "--retry", "3", "--connect-timeout", "15", "-o", dest, url)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+		if err := downloadOnce(url, dest); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return lastErr
+}
+
+func downloadOnce(url, dest string) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func copyFile(src, dst string) error {
@@ -248,12 +381,19 @@ func runDriver(script []byte, env []string, prefix ...string) error {
 	return cmd.Run()
 }
 
+// numJobs is runtime.NumCPU(), used for MAKEFLAGS below -- makepkg.conf
+// normally sets this for you, but our minimal env starts blank, which
+// otherwise silently defaults most Makefiles to a single-threaded build.
+var numJobs = strconv.Itoa(runtime.NumCPU())
+
 func baseEnv(extra ...string) []string {
 	env := []string{
 		"HOME=" + os.Getenv("HOME"),
 		"PATH=" + os.Getenv("PATH"),
 		"TERM=" + firstNonEmpty(os.Getenv("TERM"), "dumb"),
 		"LANG=" + firstNonEmpty(os.Getenv("LANG"), "C.UTF-8"),
+		"MAKEFLAGS=-j" + numJobs,
+		"CARGO_BUILD_JOBS=" + numJobs,
 	}
 	return append(env, extra...)
 }

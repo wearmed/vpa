@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"vur/internal/config"
@@ -30,6 +31,8 @@ OPTIONS:
 --edit                         - Open each PKGBUILD in $EDITOR before building
 --devel                        - Also rebuild -git/-svn/-hg packages on
                                   upgrade if upstream moved past pkgver
+--parallel=<N>                - Concurrent source downloads per package
+                                  (default: 4)
 --help                         - (same as: help)
 
 SUBCOMMANDS:
@@ -90,6 +93,10 @@ func main() {
 			cfg.Devel = true
 		case strings.HasPrefix(a, "--color="):
 			ui.SetColors(strings.TrimPrefix(a, "--color="))
+		case strings.HasPrefix(a, "--parallel="):
+			if n, err := strconv.Atoi(strings.TrimPrefix(a, "--parallel=")); err == nil && n > 0 {
+				cfg.Parallel = n
+			}
 		case a == "--help":
 			usage()
 			os.Exit(0)

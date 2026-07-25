@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"vur/internal/aurapi"
@@ -88,17 +89,35 @@ func (a *App) cmdInstall(pkgs []string) error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("usage: vur install <pkg> [pkg...]")
 	}
+
+	var foreignArgs, aurArgs []string
+	for _, p := range pkgs {
+		if isForeignPkgArg(p) {
+			foreignArgs = append(foreignArgs, p)
+		} else {
+			aurArgs = append(aurArgs, p)
+		}
+	}
+	for _, f := range foreignArgs {
+		if err := a.installForeign(f); err != nil {
+			return err
+		}
+	}
+	if len(aurArgs) == 0 {
+		return nil
+	}
+
 	sysutil.RequireBin("git", "git")
 	sysutil.RequireBin("fakeroot", "fakeroot")
 	sysutil.RequireBin("xbps-create", "xbps")
 
-	infos, err := aurapi.Info(pkgs...)
+	infos, err := aurapi.Info(aurArgs...)
 	if err != nil {
 		return fmt.Errorf("AUR lookup failed: %w", err)
 	}
 
 	var bases []string
-	for _, name := range pkgs {
+	for _, name := range aurArgs {
 		if p, ok := aurapi.ByName(infos, name); ok {
 			bases = append(bases, p.PackageBase)
 			continue
@@ -119,13 +138,31 @@ func (a *App) cmdInstall(pkgs []string) error {
 		}
 	}
 
-	resolver := deps.NewResolver(a.Cfg.UserDepmap, a.Cfg.RepoDir)
-	for _, base := range bases {
-		dir := a.gitDir(base)
-		if err := gitutil.CloneAUR(base, dir); err != nil {
-			return err
+	// Clone every top-level requested base concurrently before the (necessarily
+	// sequential, since it prompts for confirmation) resolution walk -- network
+	// latency for N packages becomes ~1 round trip instead of N.
+	cloneErrs := make([]error, len(bases))
+	{
+		sem := make(chan struct{}, a.Cfg.Parallel)
+		var wg sync.WaitGroup
+		for i, base := range bases {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, base string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				cloneErrs[i] = gitutil.CloneAUR(base, a.gitDir(base))
+			}(i, base)
 		}
-		if err := resolver.Resolve(base, dir, a.Cfg.BuildDir, gitutil.CloneAUR, a.reviewAndLoad); err != nil {
+		wg.Wait()
+	}
+
+	resolver := deps.NewResolver(a.Cfg.UserDepmap, a.Cfg.RepoDir)
+	for i, base := range bases {
+		if cloneErrs[i] != nil {
+			return cloneErrs[i]
+		}
+		if err := resolver.Resolve(base, a.gitDir(base), a.Cfg.BuildDir, gitutil.CloneAUR, a.reviewAndLoad); err != nil {
 			return err
 		}
 	}
@@ -146,37 +183,68 @@ func (a *App) cmdInstall(pkgs []string) error {
 		return err
 	}
 
+	// Build tier-by-tier: packages within a tier have no dependency relation
+	// to each other (source fetching runs concurrently for the whole tier;
+	// the actual build()/package() steps stay sequential within a tier to
+	// avoid oversubscribing CPU cores with concurrent compiles), and each
+	// tier is installed before the next tier's builds start, since a later
+	// tier's build() may need an earlier tier's AUR-only package actually
+	// present on disk as a real compile-time dependency.
 	var builtNames []string
-	for _, pb := range resolver.PlanOrder {
-		dirs := buildpkg.NewDirs(a.Cfg.BuildDir, pb)
-		pkg, err := pkgbuild.Load(dirs.Git)
-		if err != nil {
-			return err
+	for _, tier := range resolver.Tiers() {
+		pkgs := make([]*pkgbuild.PKGBUILD, len(tier))
+		dirsList := make([]buildpkg.Dirs, len(tier))
+		fetchErrs := make([]error, len(tier))
+
+		sem := make(chan struct{}, a.Cfg.Parallel)
+		var wg sync.WaitGroup
+		for i, pb := range tier {
+			dirsList[i] = buildpkg.NewDirs(a.Cfg.BuildDir, pb)
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, pb string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				pkg, err := pkgbuild.Load(dirsList[i].Git)
+				if err != nil {
+					fetchErrs[i] = err
+					return
+				}
+				pkgs[i] = pkg
+				fetchErrs[i] = buildpkg.FetchSources(pb, pkg, dirsList[i], a.Cfg.Parallel, a.Cfg.CacheDir)
+			}(i, pb)
 		}
-		if err := buildpkg.FetchSources(pb, pkg, dirs); err != nil {
-			return err
-		}
-		if err := buildpkg.RunBuild(pb, pkg, dirs, arch); err != nil {
-			return err
-		}
-		if err := buildpkg.RunPackage(pb, pkg, dirs, arch); err != nil {
-			return err
-		}
-		depsStr := resolver.RuntimeDepsString(pkg)
-		for _, name := range pkg.Names {
-			pkgdir := filepath.Join(dirs.Pkg, name)
-			if err := xbpsutil.Create(name, pkg.Ver, pkg.Rel, pkgdir, depsStr, pkg.Desc, pkg.URL, strings.Join(pkg.License, ", "), a.Cfg.RepoDir); err != nil {
+		wg.Wait()
+
+		var tierBuilt []string
+		for i, pb := range tier {
+			if fetchErrs[i] != nil {
+				return fmt.Errorf("%s: %w", pb, fetchErrs[i])
+			}
+			pkg, dirs := pkgs[i], dirsList[i]
+			if err := buildpkg.RunBuild(pb, pkg, dirs, arch); err != nil {
 				return err
 			}
-			builtNames = append(builtNames, name)
+			if err := buildpkg.RunPackage(pb, pkg, dirs, arch); err != nil {
+				return err
+			}
+			depsStr := resolver.RuntimeDepsString(pkg)
+			for _, name := range pkg.Names {
+				pkgdir := filepath.Join(dirs.Pkg, name)
+				if err := xbpsutil.Create(name, pkg.Ver, pkg.Rel, pkgdir, depsStr, pkg.Desc, pkg.URL, strings.Join(pkg.License, ", "), a.Cfg.RepoDir); err != nil {
+					return err
+				}
+				tierBuilt = append(tierBuilt, name)
+			}
 		}
-	}
 
-	if err := xbpsutil.Rindex(a.Cfg.RepoDir); err != nil {
-		return err
-	}
-	if err := xbpsutil.Install(a.Cfg.RepoDir, builtNames...); err != nil {
-		return err
+		if err := xbpsutil.Rindex(a.Cfg.RepoDir); err != nil {
+			return err
+		}
+		if err := xbpsutil.Install(a.Cfg.RepoDir, a.Cfg.CacheDir, tierBuilt...); err != nil {
+			return err
+		}
+		builtNames = append(builtNames, tierBuilt...)
 	}
 
 	m, err := manifest.Load(a.Cfg.ManifestFile)

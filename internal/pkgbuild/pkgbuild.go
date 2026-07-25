@@ -3,43 +3,58 @@
 package pkgbuild
 
 import (
-	_ "embed"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"vur/internal/gitutil"
+	"vur/internal/xbpsutil"
 )
+
+var (
+	archOnce  sync.Once
+	archValue string
+)
+
+// currentArch is cached for the process lifetime -- it can't change mid-run.
+func currentArch() string {
+	archOnce.Do(func() {
+		archValue, _ = xbpsutil.Arch()
+	})
+	return archValue
+}
 
 //go:embed extract.sh
 var extractScript []byte
 
 type PKGBUILD struct {
-	Names       []string
-	Base        string
-	Ver         string
-	Rel         string
-	Desc        string
-	URL         string
-	Install     string
-	Arch        []string
-	License     []string
-	Depends     []string
-	MakeDepends []string
+	Names        []string
+	Base         string
+	Ver          string
+	Rel          string
+	Desc         string
+	URL          string
+	Install      string
+	Arch         []string
+	License      []string
+	Depends      []string
+	MakeDepends  []string
 	CheckDepends []string
-	OptDepends  []string
-	Provides    []string
-	Conflicts   []string
-	Replaces    []string
-	Source      []string
-	Sha256sums  []string
-	Sha512sums  []string
-	B2sums      []string
-	Md5sums     []string
-	NoExtract   []string
+	OptDepends   []string
+	Provides     []string
+	Conflicts    []string
+	Replaces     []string
+	Source       []string
+	Sha256sums   []string
+	Sha512sums   []string
+	B2sums       []string
+	Md5sums      []string
+	NoExtract    []string
 }
 
 // Load sources dir/PKGBUILD and parses its variables.
@@ -59,7 +74,7 @@ func Load(dir string) (*PKGBUILD, error) {
 	}
 	tmp.Close()
 
-	cmd := exec.Command("bash", tmp.Name(), dir)
+	cmd := exec.Command("bash", tmp.Name(), dir, currentArch())
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
@@ -121,6 +136,16 @@ func Load(dir string) (*PKGBUILD, error) {
 			}
 			if f, ok := arrayFields[name]; ok {
 				*f = nil
+				curArray = f
+			} else {
+				curArray = nil
+			}
+		case strings.HasPrefix(s, "X\t"):
+			// Arch-specific override (e.g. source_x86_64): appends to the
+			// existing base array (source, depends, ...) rather than
+			// resetting it, matching makepkg's own arch-override semantics.
+			name := s[2:]
+			if f, ok := arrayFields[name]; ok {
 				curArray = f
 			} else {
 				curArray = nil

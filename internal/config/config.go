@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	Devel        bool
 	CleanAfter   bool
 	Editor       string
+	Parallel     int
 }
 
 const (
@@ -53,6 +55,7 @@ func Load() (*Config, error) {
 		ConfigFile:   filepath.Join(configDir, "vur.conf"),
 		UserDepmap:   filepath.Join(configDir, "depmap.conf"),
 		Editor:       firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"), "vi"),
+		Parallel:     4,
 	}
 
 	for _, d := range []string{c.BuildDir, c.RepoDir, c.ReviewedDir, c.ConfigDir} {
@@ -102,6 +105,10 @@ func (c *Config) loadFile() error {
 			c.CleanAfter = val == "1"
 		case "EDITOR":
 			c.Editor = val
+		case "PARALLEL_DOWNLOADS":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 {
+				c.Parallel = n
+			}
 		}
 	}
 	return sc.Err()

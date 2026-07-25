@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"vur/internal/sysutil"
 )
@@ -56,7 +57,11 @@ func Create(pkgname, pkgver, pkgrel, pkgdir, deps, desc, url, license, repoDir s
 	if desc == "" {
 		desc = pkgname
 	}
-	args := []string{"-A", arch, "-n", fmt.Sprintf("%s-%s_%s", pkgname, pkgver, pkgrel), "-s", desc}
+	// compression=none: this repo is a throwaway local staging area (wiped by
+	// `vur clean`), so there's nothing to gain from spending CPU time
+	// compressing a package that's about to be immediately re-unpacked by
+	// xbps-install -- pure overhead for us.
+	args := []string{"-A", arch, "-n", fmt.Sprintf("%s-%s_%s", pkgname, pkgver, pkgrel), "-s", desc, "--compression", "none"}
 	if deps != "" {
 		args = append(args, "-D", deps)
 	}
@@ -94,12 +99,47 @@ func Rindex(repoDir string) error {
 	return sysutil.RunInteractive("xbps-rindex", args...)
 }
 
-// Install installs pkgs from repoDir via sudo xbps-install.
-func Install(repoDir string, pkgs ...string) error {
+const repoSyncInterval = 6 * time.Hour
+
+// needsSync reports whether the configured Void repos' local index data is
+// stale enough to warrant a real network sync. `xbps-install -S` re-fetches
+// every configured repo's index (not just our own throwaway local one) on
+// every single call, which is the dominant cost of an otherwise-instant
+// install if run unconditionally -- a marker file under cacheDir bounds how
+// often that actually happens.
+func needsSync(cacheDir string) bool {
+	marker := filepath.Join(cacheDir, "last-repo-sync")
+	fi, err := os.Stat(marker)
+	if err != nil {
+		return true
+	}
+	return time.Since(fi.ModTime()) > repoSyncInterval
+}
+
+func markSynced(cacheDir string) {
+	marker := filepath.Join(cacheDir, "last-repo-sync")
+	now := time.Now()
+	if err := os.Chtimes(marker, now, now); err != nil {
+		f, ferr := os.Create(marker)
+		if ferr == nil {
+			f.Close()
+		}
+	}
+}
+
+// Install installs pkgs from repoDir via sudo xbps-install, syncing the
+// configured Void repos' index only if it looks stale (see needsSync).
+func Install(repoDir, cacheDir string, pkgs ...string) error {
 	if len(pkgs) == 0 {
 		return nil
 	}
-	args := append([]string{"xbps-install", "--repository=" + repoDir, "-Sy"}, pkgs...)
+	args := []string{"xbps-install", "--repository=" + repoDir}
+	if needsSync(cacheDir) {
+		args = append(args, "-S")
+		markSynced(cacheDir)
+	}
+	args = append(args, "-y")
+	args = append(args, pkgs...)
 	if err := sysutil.RunInteractive("sudo", args...); err != nil {
 		return fmt.Errorf("xbps-install failed for: %s", strings.Join(pkgs, " "))
 	}

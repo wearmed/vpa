@@ -70,6 +70,18 @@
     "paru",
     "pikaur",
     "retargeted",
-    "pacman"
+    "pacman",
+    "bsdtar",
+    "libarchive",
+    "cpio",
+    "dpkg",
+    "PKGINFO",
+    "BUILDINFO",
+    "MTREE",
+    "foreignpkg",
+    "rpm2cpio",
+    "globone",
+    "xdata",
+    "pkgtype"
   ]
 }

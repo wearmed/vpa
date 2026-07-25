@@ -86,9 +86,13 @@ type Resolver struct {
 
 	PlanOrder  []string
 	Unresolved []string
+	// Edges maps a pkgbase to the direct AUR-only pkgbases it depends on --
+	// used to group PlanOrder into dependency tiers for safe parallel builds
+	// (see Tiers).
+	Edges map[string][]string
 
-	cache    map[string]Classification
-	planSeen map[string]bool
+	cache     map[string]Classification
+	planSeen  map[string]bool
 	planStack []string
 }
 
@@ -98,6 +102,7 @@ func NewResolver(userDepmap, repoDir string) *Resolver {
 		RepoDir:    repoDir,
 		cache:      make(map[string]Classification),
 		planSeen:   make(map[string]bool),
+		Edges:      make(map[string][]string),
 	}
 }
 
@@ -165,6 +170,7 @@ func (r *Resolver) Resolve(pkgbase, gitdir, buildDir string, clone CloneFunc, re
 		case Installed, Available:
 			// nothing to do
 		case AUR:
+			r.Edges[pkgbase] = append(r.Edges[pkgbase], c.AURBase)
 			subdir := buildDir + "/" + c.AURBase + "/git"
 			if err := clone(c.AURBase, subdir); err != nil {
 				return err
@@ -181,6 +187,36 @@ func (r *Resolver) Resolve(pkgbase, gitdir, buildDir string, clone CloneFunc, re
 	r.planSeen[pkgbase] = true
 	r.planStack = r.planStack[:len(r.planStack)-1]
 	return nil
+}
+
+// Tiers groups PlanOrder into dependency levels: tier 0 has no unbuilt AUR
+// deps, tier 1's deps are all satisfied by tier 0, and so on. Packages
+// within a tier have no dependency relationship to each other, so they can
+// build concurrently; each tier must be installed before the next tier's
+// builds start, since a later tier's build() may need an earlier tier's
+// AUR-only package actually present on disk (a real compile-time
+// dependency, not just a runtime one).
+func (r *Resolver) Tiers() [][]string {
+	level := make(map[string]int, len(r.PlanOrder))
+	for _, pb := range r.PlanOrder {
+		best := 0
+		for _, dep := range r.Edges[pb] {
+			if level[dep]+1 > best {
+				best = level[dep] + 1
+			}
+		}
+		level[pb] = best
+	}
+
+	var tiers [][]string
+	for _, pb := range r.PlanOrder {
+		l := level[pb]
+		for len(tiers) <= l {
+			tiers = append(tiers, nil)
+		}
+		tiers[l] = append(tiers[l], pb)
+	}
+	return tiers
 }
 
 // RuntimeDepsString builds the resolved runtime dependency pkgpattern
