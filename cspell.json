@@ -68,6 +68,8 @@
     "cgo",
     "resultcount",
     "paru",
-    "pikaur"
+    "pikaur",
+    "retargeted",
+    "pacman"
   ]
 }

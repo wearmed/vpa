@@ -70,6 +70,13 @@ vur rm pipes.sh
   PKGBUILD's dynamic `pkgver()` is never invoked, so the version string can lag.
 - Builds run serially.
 
+## Credits
+
+Most of the UX ideas here — the numbered install picker, `--devel` rebuilds,
+PKGBUILD review-before-build, `--edit` — are lifted straight from
+[yay](https://github.com/Jguer/yay). vur is really just yay's ideas retargeted
+at xbps instead of pacman, with the vpm-style CLI grafted on top.
+
 ## License
 
 GPLv3, see [LICENSE](LICENSE).
