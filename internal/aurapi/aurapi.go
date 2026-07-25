@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,26 +14,26 @@ import (
 )
 
 type Package struct {
-	Name        string
-	PackageBase string
-	Version     string
-	Description string
-	URL         string
-	License     []string
-	Depends     []string
-	MakeDepends []string
-	OptDepends  []string
-	Maintainer  string
-	NumVotes    int
-	Popularity  float64
+	Name         string
+	PackageBase  string
+	Version      string
+	Description  string
+	URL          string
+	License      []string
+	Depends      []string
+	MakeDepends  []string
+	OptDepends   []string
+	Maintainer   string
+	NumVotes     int
+	Popularity   float64
 	LastModified int64
 }
 
 type rpcResponse struct {
-	ResultCount int         `json:"resultcount"`
-	Type        string      `json:"type"`
-	Error       string      `json:"error"`
-	Results     []Package   `json:"results"`
+	ResultCount int       `json:"resultcount"`
+	Type        string    `json:"type"`
+	Error       string    `json:"error"`
+	Results     []Package `json:"results"`
 }
 
 var httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -120,4 +121,22 @@ func ByName(pkgs []Package, name string) (Package, bool) {
 		}
 	}
 	return Package{}, false
+}
+
+// pkgNameRe matches the character set the AUR itself allows in package
+// names. Names from the RPC become directory components under the build
+// cache, so anything containing a path separator or ".." has to be
+// rejected outright rather than trusted to be well-behaved.
+var pkgNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9@._+-]*$`)
+
+// ValidPackageName reports whether name is safe to use as a package name
+// and as a single path component.
+func ValidPackageName(name string) bool {
+	if name == "" || len(name) > 255 || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, "/\\") {
+		return false
+	}
+	return pkgNameRe.MatchString(name)
 }

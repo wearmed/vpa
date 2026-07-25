@@ -4,8 +4,8 @@
 package buildpkg
 
 import (
-	_ "embed"
 	"archive/zip"
+	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -125,14 +125,41 @@ func FetchSources(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, parallel int, c
 	return nil
 }
 
+// safeJoin joins name onto base, refusing anything that would escape base.
+// Every component here (source filenames, the "name::url" left-hand side,
+// checksum values used as cache keys) comes straight out of a PKGBUILD, so
+// a hostile or simply malformed one could otherwise write outside the build
+// directory -- filepath.Join happily normalises "../.." away. Approving a
+// PKGBUILD already grants code execution via build(), so this isn't the
+// last line of defence, but source fetching happens before build() runs and
+// clobbering files outside the sandbox should never be possible by accident.
+func safeJoin(base, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty path component")
+	}
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("absolute path not allowed: %s", name)
+	}
+	joined := filepath.Join(base, name)
+	cleanBase := filepath.Clean(base)
+	if joined != cleanBase && !strings.HasPrefix(joined, cleanBase+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path escapes the build directory: %s", name)
+	}
+	return joined, nil
+}
+
 func fetchOneSource(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, i int, entry, sourceCache string) error {
 	fname, url := pkgbuild.SplitSourceEntry(entry)
+
+	dest, err := safeJoin(d.Src, fname)
+	if err != nil {
+		return fmt.Errorf("%s: refusing source %q: %w", pkgbase, entry, err)
+	}
 
 	switch {
 	case strings.HasPrefix(url, "git+"):
 		return fetchGitSource(url, fname, d.Src)
 	case strings.Contains(url, "://"):
-		dest := filepath.Join(d.Src, fname)
 		if cached, ok := cachedSource(pb, i, sourceCache); ok {
 			if err := copyFile(cached, dest); err == nil && verifyChecksum(pb, i, fname, d.Src) == nil {
 				maybeExtract(pb, fname, d.Src)
@@ -150,11 +177,14 @@ func fetchOneSource(pkgbase string, pb *pkgbuild.PKGBUILD, d Dirs, i int, entry,
 		saveToCache(pb, i, dest, sourceCache)
 		maybeExtract(pb, fname, d.Src)
 	default:
-		srcPath := filepath.Join(d.Git, url)
+		srcPath, err := safeJoin(d.Git, url)
+		if err != nil {
+			return fmt.Errorf("%s: refusing source %q: %w", pkgbase, entry, err)
+		}
 		if _, err := os.Stat(srcPath); err != nil {
 			return fmt.Errorf("%s: local source '%s' not found in checkout", pkgbase, url)
 		}
-		if err := copyFile(srcPath, filepath.Join(d.Src, fname)); err != nil {
+		if err := copyFile(srcPath, dest); err != nil {
 			return err
 		}
 		if err := verifyChecksum(pb, i, fname, d.Src); err != nil {
@@ -183,7 +213,10 @@ func cachedSource(pb *pkgbuild.PKGBUILD, i int, sourceCache string) (string, boo
 	if sum == "" {
 		return "", false
 	}
-	path := filepath.Join(sourceCache, sum)
+	path, err := safeJoin(sourceCache, sum)
+	if err != nil {
+		return "", false // a checksum field containing path separators
+	}
 	if _, err := os.Stat(path); err != nil {
 		return "", false
 	}
@@ -195,10 +228,18 @@ func saveToCache(pb *pkgbuild.PKGBUILD, i int, file, sourceCache string) {
 	if sum == "" {
 		return
 	}
-	copyFile(file, filepath.Join(sourceCache, sum))
+	path, err := safeJoin(sourceCache, sum)
+	if err != nil {
+		return
+	}
+	copyFile(file, path)
 }
 
 func fetchGitSource(url, fname, srcdir string) error {
+	dest, err := safeJoin(srcdir, fname)
+	if err != nil {
+		return fmt.Errorf("refusing git source %q: %w", fname, err)
+	}
 	real := strings.TrimPrefix(url, "git+")
 	base, frag, _ := strings.Cut(real, "#")
 	ref := ""
@@ -206,7 +247,7 @@ func fetchGitSource(url, fname, srcdir string) error {
 		_, ref, _ = strings.Cut(frag, "=")
 	}
 	ui.Info("cloning %s", fname)
-	return gitutil.CloneWorkingCopy(base, filepath.Join(srcdir, fname), ref)
+	return gitutil.CloneWorkingCopy(base, dest, ref)
 }
 
 // download fetches url to dest using a shared, connection-reusing HTTP

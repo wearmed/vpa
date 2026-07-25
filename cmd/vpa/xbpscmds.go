@@ -30,14 +30,26 @@ func (a *App) cmdWhatProvides(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: vpa whatprovides <file>")
 	}
-	return xbpsutil.Owns(args[0])
+	out, _ := xbpsutil.Owns(args[0])
+	if out == "" {
+		ui.Info("no installed package owns %s", args[0])
+		return nil
+	}
+	fmt.Println(out)
+	return nil
 }
 
 func (a *App) cmdSearchFile(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: vpa searchfile <file>")
 	}
-	return xbpsutil.SearchFile(args[0])
+	out, _ := xbpsutil.SearchFile(args[0])
+	if out == "" {
+		ui.Info("no installed package has a file matching %q", args[0])
+		return nil
+	}
+	fmt.Println(out)
+	return nil
 }
 
 func (a *App) cmdDeps(args []string) error {
@@ -54,10 +66,25 @@ func (a *App) cmdReverse(args []string) error {
 	return xbpsutil.RevDeps(args[0], a.Cfg.RepoDir)
 }
 
-func (a *App) cmdOrphans() error { return xbpsutil.Orphans() }
+func (a *App) cmdOrphans() error {
+	out, _ := xbpsutil.Orphans()
+	if out == "" {
+		ui.Ok("nothing to clean up -- no orphaned packages")
+		return nil
+	}
+	fmt.Println(out)
+	ui.Info("remove these with: vpa autoremove")
+	return nil
+}
 
 func (a *App) cmdAutoremove() error {
-	if !ui.Confirm("Remove packages that were installed as dependencies and are no longer needed?") {
+	out, _ := xbpsutil.Orphans()
+	if out == "" {
+		ui.Ok("nothing to remove -- no orphaned packages")
+		return nil
+	}
+	fmt.Println(out)
+	if !ui.Confirm("Remove the above packages?") {
 		return nil
 	}
 	return xbpsutil.Autoremove(ui.NoConfirm)

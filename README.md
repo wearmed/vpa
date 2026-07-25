@@ -152,11 +152,17 @@ For an AUR package:
 ## Known limitations
 
 - `options=()` flags (`!strip`, `docs`, etc.) are ignored.
-- `.install` scriptlets are shown for review but not converted to xbps hooks.
 - No systemd-only dependency substitutes — Void has none, so `depmap.conf`
   marks them unresolvable rather than guessing.
 - `-git` packages: `update --devel` catches upstream commits moving, but a
   PKGBUILD's dynamic `pkgver()` is never invoked, so the version string can lag.
+- AUR `.install` scriptlets are shown during review but not yet converted
+  into xbps INSTALL/REMOVE hooks, so a package relying on post-install
+  steps won't run them.
+- No PGP signature checking of sources: they're verified against the
+  checksums in the PKGBUILD, which covers tampering in transit but not a
+  compromised upstream release.
+- No shell completion yet.
 - Imported `.deb`/RPM/Arch packages carry no usable dependency information —
   their declared deps are printed as a warning, not installed.
 - Shared-library dependency matching only works for actual libraries —

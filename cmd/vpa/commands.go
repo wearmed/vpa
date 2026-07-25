@@ -55,7 +55,7 @@ func (a *App) cmdSearch(args []string) error {
 		wg       sync.WaitGroup
 	)
 	wg.Add(2)
-	go func() { defer wg.Done(); voidPkgs, voidErr = xbpsutil.SearchRepos(term, a.Cfg.RepoDir) }()
+	go func() { defer wg.Done(); voidPkgs, voidErr = xbpsutil.SearchRepos(term) }()
 	go func() { defer wg.Done(); aurPkgs, aurErr = aurapi.Search(term) }()
 	wg.Wait()
 
@@ -105,10 +105,10 @@ func (a *App) cmdInfo(args []string) error {
 	}
 	name := args[0]
 
-	inVoid := xbpsutil.ExistsInRepos(name, a.Cfg.RepoDir)
+	inVoid := xbpsutil.IsInVoidRepos(name)
 	if inVoid {
 		fmt.Printf("%s\n", ui.Bold("void/"+name))
-		if err := xbpsutil.ShowRepo(name, a.Cfg.RepoDir); err != nil {
+		if err := xbpsutil.ShowRepo(name); err != nil {
 			ui.Warn("couldn't read Void package info: %v", err)
 		}
 	}
@@ -169,10 +169,12 @@ func (a *App) cmdInstall(pkgs []string) error {
 			xbpsFileArgs = append(xbpsFileArgs, p)
 		case isForeignPkgArg(p):
 			foreignArgs = append(foreignArgs, p)
-		case xbpsutil.IsInstalled(p) || xbpsutil.IsAvailable(p, a.Cfg.RepoDir):
-			// Already a real Void package (installed, or in Void's own
-			// repos) -- no PKGBUILD, no AUR involved, skip straight to
-			// plain xbps-install instead of erroring "not found in AUR".
+		case xbpsutil.IsInVoidRepos(p):
+			// A real Void package -- no PKGBUILD, no AUR involved, so go
+			// straight to xbps-install. Note this deliberately checks Void's
+			// own repos only, not vpa's local build repo: anything vpa built
+			// earlier also lives there, and counting that would make this
+			// reinstall the stale cached build instead of checking the AUR.
 			voidArgs = append(voidArgs, p)
 		default:
 			aurArgs = append(aurArgs, p)
@@ -189,8 +191,21 @@ func (a *App) cmdInstall(pkgs []string) error {
 		}
 	}
 	if len(voidArgs) > 0 {
-		if err := a.installVoidRepo(voidArgs); err != nil {
-			return err
+		// xbps prints a red "ERROR: Package X already installed." and still
+		// exits 0 for these, which reads like a failure when nothing is
+		// wrong. Filter them out and say so plainly instead.
+		var todo []string
+		for _, p := range voidArgs {
+			if xbpsutil.IsInstalled(p) {
+				ui.Ok("%s is already installed", p)
+				continue
+			}
+			todo = append(todo, p)
+		}
+		if len(todo) > 0 {
+			if err := a.installVoidRepo(todo); err != nil {
+				return err
+			}
 		}
 	}
 	if len(aurArgs) == 0 {
@@ -207,15 +222,34 @@ func (a *App) cmdInstall(pkgs []string) error {
 	}
 
 	var bases []string
+	var badBases []string
 	seenBase := make(map[string]bool)
 	addBase := func(base string) {
+		// A pkgbase becomes a directory under the build cache, so reject
+		// anything that isn't usable as a single path component rather
+		// than letting it escape.
+		if !aurapi.ValidPackageName(base) {
+			badBases = append(badBases, base)
+			return
+		}
 		if !seenBase[base] {
 			seenBase[base] = true
 			bases = append(bases, base)
 		}
 	}
+	tracked, err := manifest.Load(a.Cfg.ManifestFile)
+	if err != nil {
+		return err
+	}
 	for _, name := range aurArgs {
 		if p, ok := aurapi.ByName(infos, name); ok {
+			// Rebuilding something already installed at the version the AUR
+			// currently offers can cost minutes for a large package and
+			// achieves nothing. `vpa update` is what refreshes these.
+			if e, known := tracked.Get(name); known && e.Version == p.Version && xbpsutil.IsInstalled(name) {
+				ui.Ok("%s %s is already installed and up to date", name, e.Version)
+				continue
+			}
 			addBase(p.PackageBase)
 			continue
 		}
@@ -233,6 +267,13 @@ func (a *App) cmdInstall(pkgs []string) error {
 			}
 			addBase(base)
 		}
+	}
+
+	if len(badBases) > 0 {
+		return fmt.Errorf("refusing package name(s) with unexpected characters: %s", strings.Join(badBases, ", "))
+	}
+	if len(bases) == 0 {
+		return nil // everything requested was already installed and current
 	}
 
 	// Clone every top-level requested base concurrently before the (necessarily
@@ -356,7 +397,7 @@ func (a *App) cmdInstall(pkgs []string) error {
 		}
 		commit := buildpkg.BuiltVCSCommit(pkg, dirs)
 		for _, name := range pkg.Names {
-			m.Set(name, pkg.Ver+"-"+pkg.Rel, commit)
+			m.Set(name, pkg.FullVersion(), commit)
 		}
 		if a.Cfg.CleanAfter {
 			os.RemoveAll(dirs.Src)

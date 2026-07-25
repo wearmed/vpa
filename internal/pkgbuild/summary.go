@@ -31,7 +31,7 @@ var (
 	// which lets an empty assignment like "install=" swallow the line break
 	// and capture text from a later line entirely. (.*?) rather than (.+?)
 	// so an empty value stays empty instead of failing to match at all.
-	scalarRe = regexp.MustCompile(`(?m)^[ \t]*(pkgname|pkgver|pkgrel|pkgdesc|url|license|install)[ \t]*=[ \t]*(.*?)[ \t]*$`)
+	scalarRe = regexp.MustCompile(`(?m)^[ \t]*(pkgname|pkgver|pkgrel|epoch|pkgdesc|url|license|install)[ \t]*=[ \t]*(.*?)[ \t]*$`)
 	arrayRe  = regexp.MustCompile(`(?ms)^[ \t]*(depends|source)[ \t]*=[ \t]*\((.*?)\)`)
 )
 
@@ -40,7 +40,7 @@ func Summarize(text []byte) Summary {
 	var s Summary
 	src := string(text)
 
-	var rel string
+	var rel, epoch string
 	for _, m := range scalarRe.FindAllStringSubmatch(src, -1) {
 		val := unquote(m[2])
 		switch m[1] {
@@ -50,6 +50,8 @@ func Summarize(text []byte) Summary {
 			s.Version = val
 		case "pkgrel":
 			rel = val
+		case "epoch":
+			epoch = val
 		case "pkgdesc":
 			s.Description = val
 		case "url":
@@ -63,6 +65,9 @@ func Summarize(text []byte) Summary {
 	}
 	if rel != "" && s.Version != "" {
 		s.Version += "-" + rel
+	}
+	if epoch != "" && epoch != "0" && s.Version != "" {
+		s.Version = epoch + ":" + s.Version
 	}
 
 	for _, m := range arrayRe.FindAllStringSubmatch(src, -1) {

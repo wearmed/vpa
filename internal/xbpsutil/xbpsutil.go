@@ -32,6 +32,16 @@ func IsAvailable(name, repoDir string) bool {
 	return sysutil.RunSilent("xbps-query", "-R", "--repository="+repoDir, name) == nil
 }
 
+// IsInVoidRepos reports whether name comes from Void's own configured
+// repositories, deliberately excluding vpa's local build repo. Routing an
+// install has to use this rather than IsAvailable: once vpa builds an AUR
+// package it lands in the local repo, and treating that as "it's a Void
+// package" would make every later install silently reinstall the stale
+// cached build instead of checking the AUR for a newer version.
+func IsInVoidRepos(name string) bool {
+	return sysutil.RunSilent("xbps-query", "-R", name) == nil
+}
+
 // SonameProviders builds a reverse index of every shared-library soname
 // (e.g. "libXss.so.1") provided by any package in Void's configured repos
 // (plus repoDir) to the bare package name that provides it. Used to match
@@ -232,9 +242,12 @@ type RepoPackage struct {
 // dashes and digits.
 var searchLineRe = regexp.MustCompile(`^\[([*-])\]\s+(\S+)\s*(.*)$`)
 
-// SearchRepos searches Void's configured repositories (plus repoDir).
-func SearchRepos(term, repoDir string) ([]RepoPackage, error) {
-	out, err := sysutil.Output("xbps-query", "-Rs", term, "--repository="+repoDir)
+// SearchRepos searches Void's configured repositories. Deliberately does
+// not include vpa's local build repo: that's an internal staging area, and
+// including it would label AUR packages vpa happens to have built as
+// "void/", which is misleading about where they actually come from.
+func SearchRepos(term string) ([]RepoPackage, error) {
+	out, err := sysutil.Output("xbps-query", "-Rs", term)
 	if err != nil {
 		// xbps-query exits non-zero when nothing matched; that's not an error.
 		return nil, nil
@@ -276,14 +289,9 @@ func SearchRepos(term, repoDir string) ([]RepoPackage, error) {
 	return pkgs, nil
 }
 
-// ShowRepo prints full metadata for a package from the repositories.
-func ShowRepo(name, repoDir string) error {
-	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-S", name)
-}
-
-// ExistsInRepos reports whether name resolves in Void's repos or repoDir.
-func ExistsInRepos(name, repoDir string) bool {
-	return IsAvailable(name, repoDir)
+// ShowRepo prints full metadata for a package from Void's repositories.
+func ShowRepo(name string) error {
+	return sysutil.RunInteractive("xbps-query", "-R", "-S", name)
 }
 
 // ListInstalled returns every installed package name, in xbps's own order.
@@ -345,8 +353,13 @@ func Files(name, repoDir string) error {
 	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-f", name)
 }
 
-// Owns finds which package owns a file.
-func Owns(path string) error { return sysutil.RunInteractive("xbps-query", "-o", path) }
+// Owns returns the xbps-query -o output for a path. Returned rather than
+// streamed so the caller can tell "nothing owns this" apart from an error
+// and say so, instead of printing nothing at all.
+func Owns(path string) (string, error) {
+	out, err := sysutil.Output("xbps-query", "-o", path)
+	return strings.TrimSpace(out), err
+}
 
 // Deps lists a package's dependencies.
 func Deps(name, repoDir string) error {
@@ -358,8 +371,13 @@ func RevDeps(name, repoDir string) error {
 	return sysutil.RunInteractive("xbps-query", "-R", "--repository="+repoDir, "-X", name)
 }
 
-// Orphans lists packages installed only as dependencies and no longer needed.
-func Orphans() error { return sysutil.RunInteractive("xbps-query", "-O") }
+// Orphans returns packages installed only as dependencies and no longer
+// needed. Empty output is the common (and good) case, so it's returned
+// rather than streamed so the caller can say so explicitly.
+func Orphans() (string, error) {
+	out, err := sysutil.Output("xbps-query", "-O")
+	return strings.TrimSpace(out), err
+}
 
 // Autoremove removes orphaned packages.
 func Autoremove(noconfirm bool) error {
@@ -417,8 +435,9 @@ func RemoveRecursive(pkgs ...string) error {
 }
 
 // SearchFile finds installed packages containing a matching file path.
-func SearchFile(pattern string) error {
-	return sysutil.RunInteractive("xbps-query", "-o", "*"+pattern+"*")
+func SearchFile(pattern string) (string, error) {
+	out, err := sysutil.Output("xbps-query", "-o", "*"+pattern+"*")
+	return strings.TrimSpace(out), err
 }
 
 // ListAlternatives lists alternative candidate groups.

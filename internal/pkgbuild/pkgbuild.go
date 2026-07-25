@@ -37,6 +37,7 @@ type PKGBUILD struct {
 	Base         string
 	Ver          string
 	Rel          string
+	Epoch        string
 	Desc         string
 	URL          string
 	Install      string
@@ -120,6 +121,8 @@ func Load(dir string) (*PKGBUILD, error) {
 				if val != "" {
 					pb.Rel = val
 				}
+			case "epoch":
+				pb.Epoch = val
 			case "pkgdesc":
 				pb.Desc = val
 			case "url":
@@ -164,6 +167,18 @@ func Load(dir string) (*PKGBUILD, error) {
 		pb.Base = pb.Names[0]
 	}
 	return pb, nil
+}
+
+// FullVersion renders the version the way the AUR reports it, including
+// the epoch prefix when the PKGBUILD sets one. Recording the version
+// without it would make every comparison against the AUR look like an
+// upgrade, so an epoch package would be rebuilt on every single update.
+func (pb *PKGBUILD) FullVersion() string {
+	v := pb.Ver + "-" + pb.Rel
+	if pb.Epoch != "" && pb.Epoch != "0" {
+		return pb.Epoch + ":" + v
+	}
+	return v
 }
 
 // IsDevel reports whether any Source entry is a git+ URL (VCS package).

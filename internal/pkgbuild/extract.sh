@@ -46,7 +46,7 @@ else
   emit_scalar pkgname
 fi
 
-for v in pkgbase pkgver pkgrel pkgdesc url install; do
+for v in pkgbase pkgver pkgrel epoch pkgdesc url install; do
   emit_scalar "$v"
 done
 

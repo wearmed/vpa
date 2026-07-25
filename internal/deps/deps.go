@@ -5,10 +5,11 @@ package deps
 
 import (
 	"bufio"
-	_ "embed"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -224,8 +225,13 @@ func (r *Resolver) Resolve(pkgbase, gitdir, buildDir string, clone CloneFunc, re
 		case Installed, Available, SonameMatch:
 			// nothing to do
 		case AUR:
+			// Recursively discovered names become directories too.
+			if !aurapi.ValidPackageName(c.AURBase) {
+				r.Unresolved = append(r.Unresolved, fmt.Sprintf("%s needs '%s', but the AUR name %q has unexpected characters", pkgbase, raw, c.AURBase))
+				continue
+			}
 			r.Edges[pkgbase] = append(r.Edges[pkgbase], c.AURBase)
-			subdir := buildDir + "/" + c.AURBase + "/git"
+			subdir := filepath.Join(buildDir, c.AURBase, "git")
 			if err := clone(c.AURBase, subdir); err != nil {
 				return err
 			}

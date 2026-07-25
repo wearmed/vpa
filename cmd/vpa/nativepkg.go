@@ -80,7 +80,15 @@ func xbpsNameFromFilename(name string) (string, error) {
 	return pkgname, nil
 }
 
+// copyToRepo copies a package file into the local repo, and does nothing
+// if it is already that exact file. Without the same-file check, installing
+// a .xbps that already lives in the repo directory would open it for
+// reading and then truncate it via os.Create -- destroying the package and
+// leaving a zero-byte file behind.
 func copyToRepo(src, dst string) error {
+	if sameFile(src, dst) {
+		return nil
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -91,8 +99,22 @@ func copyToRepo(src, dst string) error {
 		return err
 	}
 	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func sameFile(a, b string) bool {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(fa, fb)
 }
 
 // installVoidRepo installs package names that are already resolvable from
