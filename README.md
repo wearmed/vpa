@@ -44,12 +44,16 @@ search results (e.g. `1 3 5-7`), most popular result gets the highest number.
 Debian (`.deb`), or RPM (`.rpm`) package directly — it extracts the payload
 and repackages it as a real `.xbps`. This only handles the packaging side;
 it can't fix ABI differences between distros, so whether the binary actually
-runs depends on how compatible it happens to be with Void's glibc.
+runs depends on how compatible it happens to be with Void's glibc. A plain
+`.xbps` file/URL, or a name that's already in Void's own repos, skips all of
+that and installs directly — no PKGBUILD, no AUR involved.
 
 ```sh
 vur i pipes.sh
 vur i -y --edit somefuzzyterm
 vur i ./something.deb
+vur i ./something.xbps
+vur i firefox            # already in Void's repos -> installs directly
 vur up --devel
 vur rm pipes.sh
 ```

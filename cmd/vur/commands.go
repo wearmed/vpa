@@ -90,16 +90,34 @@ func (a *App) cmdInstall(pkgs []string) error {
 		return fmt.Errorf("usage: vur install <pkg> [pkg...]")
 	}
 
-	var foreignArgs, aurArgs []string
+	var xbpsFileArgs, foreignArgs, voidArgs, aurArgs []string
 	for _, p := range pkgs {
-		if isForeignPkgArg(p) {
+		switch {
+		case isXbpsFileArg(p):
+			xbpsFileArgs = append(xbpsFileArgs, p)
+		case isForeignPkgArg(p):
 			foreignArgs = append(foreignArgs, p)
-		} else {
+		case xbpsutil.IsInstalled(p) || xbpsutil.IsAvailable(p, a.Cfg.RepoDir):
+			// Already a real Void package (installed, or in Void's own
+			// repos) -- no PKGBUILD, no AUR involved, skip straight to
+			// plain xbps-install instead of erroring "not found in AUR".
+			voidArgs = append(voidArgs, p)
+		default:
 			aurArgs = append(aurArgs, p)
+		}
+	}
+	for _, f := range xbpsFileArgs {
+		if err := a.installXbpsFile(f); err != nil {
+			return err
 		}
 	}
 	for _, f := range foreignArgs {
 		if err := a.installForeign(f); err != nil {
+			return err
+		}
+	}
+	if len(voidArgs) > 0 {
+		if err := a.installVoidRepo(voidArgs); err != nil {
 			return err
 		}
 	}
