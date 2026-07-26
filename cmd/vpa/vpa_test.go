@@ -102,10 +102,11 @@ func TestCanonicalCommand(t *testing.T) {
 func TestEveryCommandHasHelp(t *testing.T) {
 	commands := []string{
 		"search", "info", "install", "devinstall", "forceinstall",
-		"remove", "removerecursive", "update", "sync", "list",
+		"downgrade", "remove", "removerecursive", "update", "sync", "list",
 		"filelist", "whatprovides", "searchfile", "deps", "reverse",
 		"orphans", "autoremove", "reconfigure", "listrepos", "addrepo",
 		"listalternatives", "setalternative", "cleanup", "hold", "unhold",
+		"version",
 	}
 	for _, c := range commands {
 		if _, ok := commandHelp[c]; !ok {

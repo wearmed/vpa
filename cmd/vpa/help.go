@@ -20,7 +20,7 @@ func canonicalCommand(name string) string {
 		return "forceinstall"
 	case "downgrade", "dg", "rollback":
 		return "downgrade"
-	case "remove", "rm":
+	case "remove", "rm", "uninstall", "delete", "purge":
 		return "remove"
 	case "removerecursive", "rr":
 		return "removerecursive"
@@ -141,9 +141,10 @@ Use "vpa install" for everything else.
 
 Rolls a package back to an earlier version.
 
-Only versions still in /var/cache/xbps can be used, which means ones you
-have installed before. A repository only ever offers the current version.
-Naming a version skips the picker.
+A repository index only ever offers the current version, so vpa looks in
+two places: /var/cache/xbps, holding versions you have installed before,
+and the repositories themselves, for older builds they still publish. The
+picker marks each one (cached) or (download). Naming a version skips it.
 
   vpa downgrade firefox
   vpa downgrade firefox 152.0_1
@@ -154,12 +155,17 @@ empties it, and doing so throws away what you could roll back to.
 After a downgrade, "vpa update" upgrades the package again unless you
 "vpa hold" it.
 `,
-	"remove": `vpa remove (rm) <pkg> [pkg...]
+	"remove": `vpa remove (rm, uninstall, delete, purge) <pkg> [pkg...]
 
 Removes packages. Works on installed Flatpaks too, given their app ID.
 
   vpa remove firefox
+  vpa uninstall firefox
   vpa remove org.mozilla.firefox
+
+"purge" is the same as "remove"; it does not additionally delete config
+files the way apt's purge does. Use "vpa removerecursive" to also drop
+dependencies nothing else needs.
 `,
 	"removerecursive": `vpa removerecursive (rr) <pkg> [pkg...]
 

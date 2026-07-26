@@ -15,7 +15,7 @@ import (
 
 // Version: a feature release bumps the tenths and clears the hundredths
 // (1.12 -> 1.2), a bugfix adds a hundredth (1.2 -> 1.21).
-const Version = "1.23"
+const Version = "1.24"
 
 func usageText() string {
 	return `vpa by Suraj
@@ -64,7 +64,8 @@ install (i) <pkg(s)>          - Install from Void's repos, the AUR,
 devinstall (di) <pkg(s)>      - Install packages plus their -devel parts
 forceinstall (fi) <pkg(s)>    - Reinstall, overwriting existing files
 downgrade (dg) <pkg> [ver]    - Roll a package back to a cached version
-remove (rm) <pkg(s)>          - Remove packages
+remove (rm, uninstall,        - Remove packages
+        delete, purge) <pkg(s)>
 removerecursive (rr) <pkg(s)> - Remove packages and unneeded dependencies
 update (up, upgrade)          - Update vpa, Flatpaks, your system, and
                                  AUR packages

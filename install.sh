@@ -225,18 +225,12 @@ verify_sha256() {
     die "the downloaded package does not match what the repository published"
   fi
   step "sha256 verified: ${expected:0:16}... for ${pkgver}.${arch}.xbps"
-  SHA_VERIFIED=1
 }
 
-SHA_VERIFIED=0
 verify_sha256
 
 VERSION=$(vpa --version 2>/dev/null || echo vpa)
-if [[ $SHA_VERIFIED -eq 1 ]]; then
-  printf '%sDone.%s %s (sha256 verified)\n' "$c_green" "$c_reset" "$VERSION"
-else
-  printf '%sDone.%s %s\n' "$c_green" "$c_reset" "$VERSION"
-fi
+printf '%sDone.%s %s\n' "$c_green" "$c_reset" "$VERSION"
 
 # A leftover source install from an earlier version of this script would
 # shadow the packaged one and keep being what actually runs.
