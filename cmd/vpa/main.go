@@ -1,4 +1,4 @@
-// vpa -- Void Package Assistant: the only Void package manager you'll need.
+// vpa by wearmed -- the universal void linux package manager.
 package main
 
 import (
@@ -14,11 +14,11 @@ import (
 )
 
 // Version is bumped by +0.1 for a feature release and +0.01 for a bugfix.
-const Version = "1.11"
+const Version = "1.12"
 
 func usageText() string {
-	return `vpa - Void Package Assistant
-the only Void package manager you'll need
+	return `vpa by wearmed
+the universal void linux package manager
 
   vpa install <name>     install something
   vpa remove  <name>     uninstall something
@@ -52,8 +52,8 @@ func usageFullText() string {
 	if xbpsVer == "" {
 		xbpsVer = "unknown"
 	}
-	return fmt.Sprintf(`vpa - Void Package Assistant
-the only Void package manager you'll need
+	return fmt.Sprintf(`vpa by wearmed
+the universal void linux package manager
 vpa version: %s   XBPS version: %s
 
 USAGE:
