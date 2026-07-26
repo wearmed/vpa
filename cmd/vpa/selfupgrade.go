@@ -9,7 +9,48 @@ import (
 
 	"vpa/internal/sysutil"
 	"vpa/internal/ui"
+	"vpa/internal/xbpsutil"
 )
+
+// xbpsOwnsSelf reports whether the running binary came from an xbps
+// package. When it did, xbps owns the file and rebuilding over it would
+// leave the package database describing something that is no longer on
+// disk -- the system upgrade handles vpa instead.
+func xbpsOwnsSelf() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return false
+	}
+	owner, err := xbpsutil.Owns(real)
+	return err == nil && strings.HasPrefix(strings.TrimSpace(owner), "vpa-")
+}
+
+// warnIfShadowed points out an install.sh copy earlier in PATH than the
+// xbps-managed one. Both can exist at once, and then `vpa update` upgrades
+// the package while the shell keeps running the other binary -- which looks
+// exactly like the update silently doing nothing.
+func warnIfShadowed() {
+	if !xbpsutil.IsInstalled("vpa") {
+		return
+	}
+	found, err := exec.LookPath("vpa")
+	if err != nil {
+		return
+	}
+	real, err := filepath.EvalSymlinks(found)
+	if err != nil {
+		return
+	}
+	if owner, err := xbpsutil.Owns(real); err == nil && strings.HasPrefix(strings.TrimSpace(owner), "vpa-") {
+		return // the one in PATH is the packaged one, nothing to warn about
+	}
+	ui.Warn("'%s' comes earlier in your PATH than the vpa package, so that's the one your shell runs.", found)
+	ui.Info("Remove it with 'rm %s' to use the packaged vpa, which updates with your system.", found)
+}
 
 // vpaCheckout resolves the running binary back to the git checkout it was
 // built from (through the ~/.local/bin symlink the installer creates), or
@@ -40,6 +81,15 @@ func vpaCheckout() (string, error) {
 // wonder whether it was checked.
 func selfUpdateIfAvailable() error {
 	ui.Info("checking for a newer vpa...")
+
+	// An xbps-managed vpa is upgraded by the system upgrade that runs later
+	// in this same command, so there is nothing to do here.
+	if xbpsOwnsSelf() {
+		ui.Ok("vpa is installed as a package -- it updates with the rest of your system")
+		warnIfShadowed()
+		return nil
+	}
+
 	root, err := vpaCheckout()
 	if err != nil {
 		return err

@@ -2,11 +2,13 @@
 package xbpsutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -478,6 +480,95 @@ func SyncRepos(noconfirm bool) error {
 // ForceInstall reinstalls packages, overwriting existing files.
 func ForceInstall(repoDir string, pkgs ...string) error {
 	args := append([]string{"xbps-install", "--repository=" + repoDir, "-f", "-y"}, pkgs...)
+	return sysutil.RunInteractive("sudo", args...)
+}
+
+// CacheDir is where xbps keeps the package files it has downloaded. They
+// stay after installation, which is what makes an offline downgrade to a
+// version no longer in any repository index possible.
+const CacheDir = "/var/cache/xbps"
+
+// CachedPackage is one package file available to install directly.
+type CachedPackage struct {
+	Name    string
+	Version string
+	Path    string
+}
+
+// CachedVersions lists every cached file for a package, newest first.
+//
+// A repository index only ever describes the current version, so the cache
+// is the one place an older build survives. Files for other architectures
+// are skipped -- they exist on multilib systems and can't be installed here.
+func CachedVersions(name string) ([]CachedPackage, error) {
+	arch, err := Arch()
+	if err != nil {
+		return nil, err
+	}
+	matches, err := filepath.Glob(filepath.Join(CacheDir, name+"-*."+arch+".xbps"))
+	if err != nil {
+		return nil, err
+	}
+
+	var out []CachedPackage
+	for _, path := range matches {
+		base := strings.TrimSuffix(filepath.Base(path), "."+arch+".xbps")
+		pkgName, version := splitPkgver(base)
+		// The glob is a prefix match, so "vpa-*" also catches "vpa-tools-1.0_1".
+		if pkgName != name {
+			continue
+		}
+		out = append(out, CachedPackage{Name: pkgName, Version: version, Path: path})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return CompareVersions(out[i].Version, out[j].Version) > 0
+	})
+	return out, nil
+}
+
+// CompareVersions orders two xbps version strings, returning >0 if a is
+// newer, <0 if older, 0 if equal. Defers to xbps-uhelper so the ordering
+// matches what xbps itself would decide, rather than reimplementing the
+// comparison rules and disagreeing at the edges.
+func CompareVersions(a, b string) int {
+	if a == b {
+		return 0
+	}
+	// cmpver exits 0/1/255 to mean equal/greater/less rather than printing.
+	err := sysutil.RunSilent("xbps-uhelper", "cmpver", a, b)
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		switch ee.ExitCode() {
+		case 1:
+			return 1
+		case 255:
+			return -1
+		}
+	}
+	return strings.Compare(a, b)
+}
+
+// InstalledVersion returns the installed version of a package, or "".
+func InstalledVersion(name string) string {
+	out, err := sysutil.Output("xbps-query", "-p", "pkgver", name)
+	if err != nil {
+		return ""
+	}
+	_, version := splitPkgver(strings.TrimSpace(out))
+	return version
+}
+
+// InstallFiles installs specific package files, overwriting what's there.
+//
+// -f is required: without it xbps refuses to "downgrade" to an older
+// version. --ignore-file-conflicts is deliberately not passed, so a genuine
+// conflict still stops the install.
+func InstallFiles(paths ...string) error {
+	args := append([]string{"xbps-install", "-f", "-y"}, paths...)
 	return sysutil.RunInteractive("sudo", args...)
 }
 

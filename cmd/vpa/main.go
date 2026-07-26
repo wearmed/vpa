@@ -63,6 +63,7 @@ install (i) <pkg(s)>          - Install from Void's repos, the AUR,
                                  Flathub, or a package file
 devinstall (di) <pkg(s)>      - Install packages plus their -devel parts
 forceinstall (fi) <pkg(s)>    - Reinstall, overwriting existing files
+downgrade (dg) <pkg> [ver]    - Roll a package back to a cached version
 remove (rm) <pkg(s)>          - Remove packages
 removerecursive (rr) <pkg(s)> - Remove packages and unneeded dependencies
 update (up, upgrade)          - Update vpa, Flatpaks, your system, and
@@ -266,6 +267,8 @@ func main() {
 		runErr = requireArgs(cmd, rest, app.cmdDevInstall)
 	case "forceinstall":
 		runErr = requireArgs(cmd, rest, app.cmdForceInstall)
+	case "downgrade":
+		runErr = requireArgs(cmd, rest, app.cmdDowngrade)
 	case "remove":
 		runErr = requireArgs(cmd, rest, app.cmdRemove)
 	case "removerecursive":

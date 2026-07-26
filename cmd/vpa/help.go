@@ -18,6 +18,8 @@ func canonicalCommand(name string) string {
 		return "devinstall"
 	case "forceinstall", "fi":
 		return "forceinstall"
+	case "downgrade", "dg", "rollback":
+		return "downgrade"
 	case "remove", "rm":
 		return "remove"
 	case "removerecursive", "rr":
@@ -134,6 +136,21 @@ Use this to repair a package whose files got damaged.
 Use "vpa install" for everything else.
 
   vpa forceinstall firefox
+`,
+	"downgrade": `vpa downgrade (dg, rollback) <pkg> [version]
+
+Rolls a package back to an earlier version.
+
+Only versions still in /var/cache/xbps can be used, which means ones you
+have installed before. A repository only ever offers the current version.
+Naming a version skips the picker.
+
+  vpa downgrade firefox
+  vpa downgrade firefox 152.0_1
+
+"vpa cleanup" empties that cache, so it also throws away what you could
+roll back to. After a downgrade, "vpa update" upgrades the package again
+unless you "vpa hold" it.
 `,
 	"remove": `vpa remove (rm) <pkg> [pkg...]
 
