@@ -2,7 +2,7 @@
 # Bootstrap installer for vpa. Either:
 #   git clone ... && cd vpa && ./install.sh
 # or, piped straight from a fresh checkout:
-#   curl -fsSL https://git.wearmed.xyz/suraj/vpa/raw/branch/main/install.sh | bash
+#   curl -fsSL https://vpa.wearmed.xyz/install.sh | bash
 set -euo pipefail
 
 REPO_URL="https://git.wearmed.xyz/suraj/vpa.git"

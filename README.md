@@ -18,7 +18,7 @@ concurrency, and packaging.
 ## Install
 
 ```sh
-curl -fsSL https://git.wearmed.xyz/suraj/vpa/raw/branch/main/install.sh | bash
+curl -fsSL https://vpa.wearmed.xyz/install.sh | bash
 ```
 
 Checks you're on Void, installs `go`/`git`/`curl`/`fakeroot` if missing,
