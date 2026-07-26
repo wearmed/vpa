@@ -10,33 +10,50 @@ import (
 )
 
 var (
+	// Message colours, gated on stderr.
 	colorRed    = ""
 	colorGreen  = ""
 	colorYellow = ""
 	colorBlue   = ""
-	colorBold   = ""
 	colorReset  = ""
+	// Result emphasis, gated on stdout independently -- see SetColors.
+	colorBold      = ""
+	colorBoldReset = ""
 )
 
 // NoConfirm, when true, makes Confirm always return true (backs --noconfirm/-y).
 var NoConfirm bool
 
-// SetColors backs --color=<yes|no|auto>. "auto" follows whether stderr is a tty.
+// SetColors backs --color=<yes|no|auto>.
+// SetColors decides colouring per stream.
+//
+// Messages go to stderr and results go to stdout, and the two are redirected
+// independently: `vpa search foo | grep bar` pipes stdout while stderr is
+// still a terminal. Gating both on stderr put escape codes into the piped
+// results, so a search that clearly printed "void/firefox" matched nothing.
 func SetColors(mode string) {
-	use := false
+	var msgs, out bool
 	switch mode {
 	case "yes":
-		use = true
+		msgs, out = true, true
 	case "no":
-		use = false
+		msgs, out = false, false
 	default:
-		use = isTTY(os.Stderr)
+		msgs, out = isTTY(os.Stderr), isTTY(os.Stdout)
 	}
-	if use {
-		colorRed, colorGreen, colorYellow, colorBlue, colorBold, colorReset =
-			"\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[1m", "\x1b[0m"
+
+	if msgs {
+		colorRed, colorGreen, colorYellow, colorBlue, colorReset =
+			"\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[0m"
 	} else {
-		colorRed, colorGreen, colorYellow, colorBlue, colorBold, colorReset = "", "", "", "", "", ""
+		colorRed, colorGreen, colorYellow, colorBlue, colorReset = "", "", "", "", ""
+	}
+	// Reset has to be non-empty whenever either stream emits codes, since
+	// both share it.
+	if out {
+		colorBold, colorBoldReset = "\x1b[1m", "\x1b[0m"
+	} else {
+		colorBold, colorBoldReset = "", ""
 	}
 }
 
@@ -67,7 +84,7 @@ func Die(format string, a ...any) {
 }
 
 func Bold(s string) string {
-	return colorBold + s + colorReset
+	return colorBold + s + colorBoldReset
 }
 
 var yesRe = regexp.MustCompile(`^[Yy]$`)

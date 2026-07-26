@@ -185,7 +185,7 @@ func (a *App) installVersion(name, want, current string, versions []xbpsutil.Cac
 			return a.doDowngrade(name, v, current)
 		}
 	}
-	ui.Warn("version '%s' of %s isn't cached", want, name)
+	ui.Warn("version '%s' of %s isn't available", want, name)
 	ui.Info("what you can go back to:")
 	for _, v := range versions {
 		fmt.Printf("  %s\n", v.Version)

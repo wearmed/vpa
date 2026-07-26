@@ -15,7 +15,7 @@ import (
 
 // Version: a feature release bumps the tenths and clears the hundredths
 // (1.12 -> 1.2), a bugfix adds a hundredth (1.2 -> 1.21).
-const Version = "1.22"
+const Version = "1.23"
 
 func usageText() string {
 	return `vpa by Suraj
@@ -314,6 +314,12 @@ func main() {
 	case "helppager":
 		helpPager()
 	default:
+		// Something starting with a dash reached dispatch, which means it
+		// wasn't a flag vpa knows. Calling that an unknown "command" sends
+		// people looking for a command they never typed.
+		if strings.HasPrefix(rawCmd, "-") {
+			ui.Die("I don't know the option '%s'. Run 'vpa help --all' to see every flag.", rawCmd)
+		}
 		ui.Die("I don't know the command '%s'. Run 'vpa help' to see what vpa can do.", rawCmd)
 	}
 

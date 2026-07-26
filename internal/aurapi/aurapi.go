@@ -82,7 +82,15 @@ func get(fullURL string) (*rpcResponse, error) {
 }
 
 // Search runs a name-desc search for term.
+// MinSearchLen is the shortest term the AUR RPC will accept. Anything
+// shorter comes back as "Query arg too small", which is a fact about their
+// API rather than something worth showing as a failed search.
+const MinSearchLen = 2
+
 func Search(term string) ([]Package, error) {
+	if len(strings.TrimSpace(term)) < MinSearchLen {
+		return nil, nil
+	}
 	u := fmt.Sprintf("%s/search?by=name-desc&arg=%s", config.AURRPC, url.QueryEscape(term))
 	r, err := get(u)
 	if err != nil {

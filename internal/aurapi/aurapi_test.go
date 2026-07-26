@@ -25,3 +25,18 @@ func TestValidPackageName(t *testing.T) {
 		}
 	}
 }
+
+// The AUR RPC rejects a one-character query with "Query arg too small".
+// Sending it anyway turned a normal search into a visible warning, even
+// though the Void results were fine.
+func TestSearchSkipsTooShortTerms(t *testing.T) {
+	for _, term := range []string{"", " ", "a", "  x  "[2:3]} {
+		got, err := Search(term)
+		if err != nil {
+			t.Errorf("Search(%q) returned an error: %v", term, err)
+		}
+		if got != nil {
+			t.Errorf("Search(%q) hit the network, want a skip", term)
+		}
+	}
+}
