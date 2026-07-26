@@ -148,9 +148,11 @@ Naming a version skips the picker.
   vpa downgrade firefox
   vpa downgrade firefox 152.0_1
 
-"vpa cleanup" empties that cache, so it also throws away what you could
-roll back to. After a downgrade, "vpa update" upgrades the package again
-unless you "vpa hold" it.
+"vpa cleanup" does not touch that cache -- "sudo xbps-remove -O" is what
+empties it, and doing so throws away what you could roll back to.
+
+After a downgrade, "vpa update" upgrades the package again unless you
+"vpa hold" it.
 `,
 	"remove": `vpa remove (rm) <pkg> [pkg...]
 

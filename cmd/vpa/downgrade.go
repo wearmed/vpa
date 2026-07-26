@@ -39,7 +39,7 @@ func (a *App) cmdDowngrade(args []string) error {
 	if len(versions) == 0 {
 		ui.Warn("no older versions of '%s' available to go back to", name)
 		ui.Info("vpa looks in %s for versions you've installed before, and in your repositories for older builds they still publish.", xbpsutil.CacheDir)
-		ui.Info("'vpa cleanup' clears that cache, so anything removed by it is gone as a rollback target.")
+		ui.Info("That cache is emptied by 'sudo xbps-remove -O', not by 'vpa cleanup' -- anything it removes is gone as a rollback target.")
 		return fmt.Errorf("nothing to downgrade '%s' to", name)
 	}
 

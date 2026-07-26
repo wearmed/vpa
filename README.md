@@ -164,9 +164,12 @@ places instead:
 - the repositories you have configured, for older builds they still publish
   even though the index has moved on (vpa's own repo keeps every release)
 
-`vpa cleanup` empties that cache, which also throws away what you could roll
-back to. After a downgrade, the next `vpa update` will upgrade the package
-straight back — `vpa hold <pkg>` stops that.
+`vpa cleanup` does *not* touch that cache — it clears vpa's own build
+directory and staging repo. `sudo xbps-remove -O` is what empties it, and
+doing so throws away what you could roll back to.
+
+After a downgrade, the next `vpa update` will upgrade the package straight
+back — `vpa hold <pkg>` stops that.
 
 ### Neglected AUR packages
 
