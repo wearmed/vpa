@@ -73,50 +73,43 @@ var commandHelp = map[string]string{
 	"search": `vpa search (s) <term>
 vpa search cat <category>
 
-Search Void's repositories, the AUR and Flathub at the same time. Void
-results come first -- a native package is nearly always the better
-choice when one exists. Anything you already have is marked
-[installed].
+Searches Void's repos, the AUR and Flathub at once.
+Void results come first. A native package is usually the better choice.
+Anything you already have is marked [installed].
+A neglected AUR package is marked [orphaned], [out of date] or
+[unmaintained for ...].
+
+Category search finds things by what they are, not by name.
+"cat" with nothing after it lists every category.
 
   vpa search firefox
-
-Searching a category shows you what's out there when you know the kind
-of thing you want but not its name. 'cat' with no category after it
-lists every category there is.
-
   vpa search cat browser
-  vpa search cat games
   vpa search cat
 
-AUR results carry a warning when a package looks neglected -- orphaned,
-flagged out of date, or untouched for a long time.
-
-Categories are curated rather than detected: nothing in xbps or the AUR
-records what kind of thing a package is. vpa ships a list, refreshes it
-from the server weekly, and you can add your own in
-~/.config/vpa/categories.conf.
+Categories are curated. Add your own in ~/.config/vpa/categories.conf.
 `,
 	"info": `vpa info <pkg>
 
-Show details for a package, from wherever it exists: Void's
-repositories, the AUR, both, or Flathub if you give an app ID.
+Shows details for a package.
+Looks in Void's repos, the AUR, or Flathub if you give an app ID.
 
   vpa info firefox
   vpa info org.mozilla.firefox
 `,
 	"install": `vpa install (i) <pkg> [pkg...]
 
-Install packages. vpa works out where each one comes from:
+Installs packages. vpa works out where each one comes from:
 
-  from Void's repositories   installed directly, nothing is built
-  from the AUR               shows you what it is, then builds it
-  a search term              opens a numbered list to pick from
-  a .xbps file or URL        installed directly
-  a .deb / .rpm / Arch file  unpacked and repackaged for Void
-  a Flatpak app ID           installed from Flathub
+  in Void's repos           installed directly, nothing is built
+  in the AUR                shows you what it is, then builds it
+  a search term             opens a numbered list to pick from
+  a .xbps file or URL       installed directly
+  a .deb / .rpm / Arch file unpacked and repackaged for Void
+  a Flatpak app ID          installed from Flathub
 
-Native packages are preferred: a Flatpak is only installed if you give
-its full app ID, or pass --flatpak.
+Native packages win. A Flatpak needs its full app ID, or --flatpak.
+With --flatpak a short name works. vpa asks if it is ambiguous.
+An orphaned or long-unmaintained AUR package asks a second time.
 
   vpa install firefox
   vpa install pipes.sh
@@ -124,145 +117,175 @@ its full app ID, or pass --flatpak.
   vpa install org.mozilla.firefox
   vpa install --flatpak gimp
 
-With --flatpak you can use a short name; vpa looks it up on Flathub and
-asks which one you meant if it's ambiguous.
-
-Options: --edit (edit an AUR build script first), --flatpak, --noconfirm
+Flags: --edit, --flatpak, --noconfirm
 `,
 	"devinstall": `vpa devinstall (di) <pkg> [pkg...]
 
-Install packages along with their -devel counterparts (the headers and
-files you need to build software against them). Packages with no
--devel counterpart are installed on their own.
+Installs packages plus their -devel counterparts.
+Those hold the headers you need to build software against them.
+Packages with no -devel counterpart are installed on their own.
 
   vpa devinstall openssl
 `,
 	"forceinstall": `vpa forceinstall (fi) <pkg> [pkg...]
 
-Reinstall packages, overwriting files already on disk. This is for
-repairing a package whose files got damaged -- use 'vpa install' for
-everything else.
+Reinstalls packages, overwriting files already on disk.
+Use this to repair a package whose files got damaged.
+Use "vpa install" for everything else.
+
+  vpa forceinstall firefox
 `,
 	"remove": `vpa remove (rm) <pkg> [pkg...]
 
-Remove packages, including installed Flatpaks (given their app ID).
+Removes packages. Works on installed Flatpaks too, given their app ID.
 
   vpa remove firefox
   vpa remove org.mozilla.firefox
 `,
 	"removerecursive": `vpa removerecursive (rr) <pkg> [pkg...]
 
-Remove packages, plus any dependencies they pulled in that nothing
-else needs anymore.
+Removes packages, plus dependencies nothing else needs anymore.
+
+  vpa removerecursive firefox
 `,
 	"update": `vpa update (up, upgrade)
 
-Update everything, in this order:
+Updates everything, in this order:
 
-  1. vpa itself, if there's a newer version
+  1. vpa itself, if there is a newer version
   2. your Flatpak applications
   3. all your installed packages
   4. anything vpa built from the AUR
 
   vpa update
 
-Options: --devel (also rebuild -git packages when their upstream code
-changed, even if the version number didn't)
+Flags: --devel (also rebuild -git packages when upstream moved)
 `,
 	"sync": `vpa sync (sy)
 
-Refresh the list of available packages from your repositories, without
-installing or updating anything. 'vpa update' does this for you, so you
-rarely need to run it yourself.
+Refreshes the list of available packages. Installs nothing.
+"vpa update" does this for you, so you rarely need it.
+
+  vpa sync
 `,
 	"list": `vpa list (ls) [--aur]
 
-List every package installed on your system. Packages vpa built from
-the AUR are tagged (aur), and Flatpak applications (flatpak). Pass
---aur to list only the AUR ones.
+Lists every package installed on your system.
+AUR packages are tagged (aur), Flatpaks (flatpak).
+
+  vpa list
+  vpa list --aur     only the AUR ones
 `,
 	"filelist": `vpa filelist (fl) <pkg>
 
-List the files a package installs. Works for packages you don't have
-installed too.
+Lists the files a package installs.
+Works on packages you do not have installed.
 
   vpa filelist firefox
 `,
 	"whatprovides": `vpa whatprovides (wp) <file>
 
-Show which package a file came from.
+Shows which package a file came from.
 
   vpa whatprovides /usr/bin/firefox
 `,
 	"searchfile": `vpa searchfile (sf) <file>
 
-Find installed packages containing a file matching what you type. Use
-this when you know part of a filename but not the package.
+Finds installed packages containing a matching file.
+Use it when you know part of a filename but not the package.
 
   vpa searchfile libssl
 `,
 	"deps": `vpa deps <pkg>
 
-Show what a package needs in order to work.
+Shows what a package needs in order to work.
+
+  vpa deps firefox
 `,
 	"reverse": `vpa reverse (rv) <pkg>
 
-Show what would break if you removed a package -- everything that
-depends on it.
+Shows everything that depends on a package.
+That is what would break if you removed it.
+
+  vpa reverse openssl
 `,
 	"orphans": `vpa orphans
 
-List packages that were only installed as dependencies and aren't
-needed by anything anymore. 'vpa autoremove' clears them out.
+Lists packages installed only as dependencies and no longer needed.
+"vpa autoremove" clears them out.
+
+  vpa orphans
 `,
 	"autoremove": `vpa autoremove (ar)
 
-Remove packages that were only installed as dependencies and aren't
-needed anymore (see 'vpa orphans').
+Removes packages installed only as dependencies and no longer needed.
+See "vpa orphans" to check the list first.
+
+  vpa autoremove
 `,
 	"reconfigure": `vpa reconfigure (rc) <pkg|all>
 
-Re-run a package's setup step. Useful if a package didn't finish
-configuring properly. Pass 'all' to do every installed package.
+Re-runs a package's setup step.
+Use it if a package did not finish configuring properly.
+
+  vpa reconfigure firefox
+  vpa reconfigure all
 `,
 	"listrepos": `vpa listrepos (lr)
 
-Show the repositories vpa installs from.
+Shows the repositories vpa installs from.
+
+  vpa listrepos
 `,
 	"addrepo": `vpa addrepo <url>
 
-Add another repository to install packages from. Only add repositories
-you trust: anything in them can install files anywhere on your system.
+Adds another repository to install from.
+Only add repositories you trust. Anything in them can install files
+anywhere on your system.
 
   vpa addrepo https://repo-default.voidlinux.org/current/nonfree
 `,
 	"listalternatives": `vpa listalternatives (la)
 
-Show which package currently provides things that several packages can
-provide (like a default text editor or C compiler).
+Shows which package provides things several packages can provide.
+For example a default text editor or C compiler.
+
+  vpa listalternatives
 `,
 	"setalternative": `vpa setalternative (sa) <pkg>
 
-Choose which package provides an alternative (see
-'vpa listalternatives').
+Chooses which package provides an alternative.
+See "vpa listalternatives" for what is configurable.
+
+  vpa setalternative vim
 `,
 	"cleanup": `vpa cleanup (cl)
 
-Free up disk space: clears vpa's build files and downloaded packages
-you no longer need. Safe to run whenever.
+Frees up disk space.
+Clears vpa's build files and downloaded packages you no longer need.
+Safe to run whenever.
+
+  vpa cleanup
 `,
 	"hold": `vpa hold [pkg...]
 
-Stop packages being updated by 'vpa update'. With no arguments, shows
-what's currently held.
-`,
-	"version": `vpa version
+Stops packages being updated by "vpa update".
+With no arguments, shows what is currently held.
 
-Show which version of vpa this is. Same as 'vpa --version'.
+  vpa hold firefox
+  vpa hold
 `,
 	"unhold": `vpa unhold <pkg> [pkg...]
 
-Allow held packages to be updated again.
+Allows held packages to be updated again.
+
+  vpa unhold firefox
+`,
+	"version": `vpa version
+
+Shows which version of vpa this is. Same as "vpa --version".
+
+  vpa version
 `,
 }
 

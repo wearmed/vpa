@@ -15,33 +15,32 @@ import (
 
 // Version: a feature release bumps the tenths and clears the hundredths
 // (1.12 -> 1.2), a bugfix adds a hundredth (1.2 -> 1.21).
-const Version = "1.2"
+const Version = "1.21"
 
 func usageText() string {
 	return `vpa by wearmed
 the universal void linux package manager
 
-  vpa install <name>     install something
-  vpa remove  <name>     uninstall something
-  vpa search  <term>     find something to install
-  vpa search cat <what>  browse by category, e.g. browser, games
-  vpa info    <name>     what is this package?
-  vpa list               what do I have installed?
-  vpa update             update everything
+COMMANDS:
+  vpa install <name>      install something
+  vpa remove <name>       uninstall something
+  vpa search <term>       find something to install
+  vpa search cat <what>   browse a category
+  vpa search cat          list every category
+  vpa info <name>         show details for a package
+  vpa list                list what you have installed
+  vpa update              update everything
 
-Getting started:
+FLAGS:
+  --assumeno              ask before making changes
+  --assumeyes             stop asking (the default)
+  --flatpak               install from Flathub
+  --edit                  edit an AUR build script first
+  --version               show which version this is
 
-  vpa search cat browser  see every browser you can install
-  vpa install firefox     install it
-  vpa update              keep everything current
-
-Just name what you want -- vpa finds it, wherever it lives.
-
-It won't pester you either: it assumes yes, and only stops to ask when
-something's genuinely worth a look.
-
-  vpa help <command>     how a specific command works
-  vpa help --all         every command vpa has
+HELP:
+  vpa help <command>      how one command works
+  vpa help --all          every command and flag
 `
 }
 
