@@ -1,44 +1,52 @@
 #!/usr/bin/env bash
-# Bootstrap installer for vpa. Either:
-#   git clone ... && cd vpa && ./install.sh
-# or, piped straight from a fresh checkout:
+# Bootstrap installer for vpa.
+#
 #   curl -fsSL https://vpa.wearmed.xyz/install.sh | bash
 #
+# Adds vpa's package repository and installs vpa from it, so vpa is an
+# ordinary xbps package that upgrades with the rest of the system. Nothing
+# is built and nothing is written outside xbps's control.
+#
 # Quiet by default: one line while it works, one when it's done. Anything
-# that actually needs a decision or has gone wrong still speaks up, and
+# needing a decision, or anything that has gone wrong, still speaks up, and
 # --verbose shows every step.
 set -euo pipefail
 
-REPO_URL="https://git.wearmed.xyz/suraj/vpa.git"
-SRC_DIR="${VPA_SRC_DIR:-$HOME/.local/share/vpa}"
+REPO_URL="${VPA_REPO_URL:-https://vpa.wearmed.xyz/repo}"
+REPO_CONF="${VPA_REPO_CONF:-/etc/xbps.d/vpa.conf}"
+
+# The fingerprint of the key the repository is signed with. Shown before
+# the trust prompt so it can be compared against a second source rather
+# than accepted purely because xbps asked.
+REPO_FINGERPRINT="77:a8:39:cc:3d:df:8c:a7:12:d5:fe:56:d2:fb:86:13"
+
+# Optional at runtime: vpa only needs these to build something from the AUR,
+# and works without them for everything else. Installed anyway so the first
+# AUR build doesn't stop halfway to ask for a compiler.
+EXTRA_DEPS=(git fakeroot bsdtar xz zstd bzip2 base-devel)
 
 c_red=$'\e[31m'; c_green=$'\e[32m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'; c_reset=$'\e[0m'
 VERBOSE=0
-BIN_DIR="${VPA_BIN_DIR:-$HOME/.local/bin}"
+WITH_AUR=1
 
 for arg in "$@"; do
   case "$arg" in
-    --system)  BIN_DIR=/usr/local/bin ;;
-    --verbose|-v) VERBOSE=1 ;;
+    --verbose|-v)  VERBOSE=1 ;;
+    --minimal)     WITH_AUR=0 ;;
     --help|-h)
-      printf 'usage: install.sh [--system] [--verbose]\n\n'
-      printf '  --system   install to /usr/local/bin instead of ~/.local/bin\n'
+      printf 'usage: install.sh [--minimal] [--verbose]\n\n'
+      printf '  --minimal  install vpa alone, without the AUR build tools\n'
       printf '  --verbose  show every step\n'
       exit 0 ;;
   esac
 done
 
-# step is the running commentary: shown only with --verbose, since the
-# point of the default output is that there isn't any.
 step() { [[ $VERBOSE -eq 1 ]] && printf '%s::%s %s\n' "$c_blue" "$c_reset" "$*"; return 0; }
 warn() { printf '%s:: warning:%s %s\n' "$c_yellow" "$c_reset" "$*" >&2; }
 die()  { printf '%s:: error:%s %s\n' "$c_red" "$c_reset" "$*" >&2; exit 1; }
 
-# LOG collects the output of everything run through quietly(), so a failure
-# can show what happened instead of just an exit code.
 LOG=$(mktemp -t vpa-install-XXXXXX.log)
-cleanup() { rm -f "$LOG"; }
-trap cleanup EXIT
+trap 'rm -f "$LOG"' EXIT
 
 # quietly runs a command, swallowing its output unless it fails (or
 # --verbose). The message it was given becomes the error text.
@@ -57,11 +65,10 @@ quietly() {
   fi
 }
 
-# Decided before anything is written, since the symlink this looks for is
-# one of the things the install creates. A packaged vpa counts too: the
-# result is still an existing install being replaced, not a first one.
+# Decided before anything is changed, since installing is what makes it
+# true. Covers a source install too, which this script used to create.
 FIRST_INSTALL=1
-if [[ -e "$BIN_DIR/vpa" ]] || command -v vpa >/dev/null 2>&1; then
+if command -v vpa >/dev/null 2>&1 || xbps-query vpa >/dev/null 2>&1; then
   FIRST_INSTALL=0
 fi
 
@@ -69,24 +76,6 @@ if [[ $FIRST_INSTALL -eq 1 ]]; then
   printf 'Installing VPA...\n'
 else
   printf 'Upgrading and reinstalling VPA...\n'
-fi
-
-# When run locally from a checkout, build in place; when piped via curl
-# (no usable $BASH_SOURCE path), fetch/update a persistent clone instead.
-SELF=$(readlink -f "${BASH_SOURCE[0]:-}" 2>/dev/null || true)
-ROOT=""
-[[ -n "$SELF" ]] && ROOT=$(cd "$(dirname "$SELF")" && pwd)
-
-if [[ -z "$ROOT" || ! -f "$ROOT/go.mod" || ! -d "$ROOT/cmd/vpa" ]]; then
-  command -v git >/dev/null 2>&1 || die "git is required to fetch vpa -- install it and re-run"
-  if [[ -d "$SRC_DIR/.git" ]]; then
-    step "updating existing vpa checkout at $SRC_DIR"
-    quietly "couldn't update the checkout at $SRC_DIR" git -C "$SRC_DIR" pull --quiet
-  else
-    step "cloning vpa into $SRC_DIR"
-    quietly "couldn't clone $REPO_URL" git clone --quiet "$REPO_URL" "$SRC_DIR"
-  fi
-  ROOT="$SRC_DIR"
 fi
 
 # vpa drives xbps and expects runit services, so anything else is a hard
@@ -114,65 +103,131 @@ elif command -v ps >/dev/null 2>&1; then
 fi
 [[ "$init" == "runit" ]] || refuse "init system is '${init:-unknown}', not runit"
 
-step "checking build-time dependencies"
-missing=()
-for bin_pkg in "go:go" "git:git" "curl:curl" "fakeroot:fakeroot"; do
-  bin=${bin_pkg%%:*} pkg=${bin_pkg#*:}
-  command -v "$bin" >/dev/null 2>&1 || missing+=("$pkg")
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-  # Announced even when quiet: this asks for a sudo password and installs
-  # packages, which shouldn't happen behind a silent progress line.
-  printf 'Installing build dependencies: %s\n' "${missing[*]}"
-  quietly "failed to install: ${missing[*]}" sudo xbps-install -Sy "${missing[@]}"
+# sudo is how every write below happens, so check it before the first one
+# rather than failing partway through.
+command -v sudo >/dev/null 2>&1 || die "sudo is required to install packages"
+
+# Announced even when quiet: this asks for a password.
+if ! sudo -n true 2>/dev/null; then
+  printf 'Administrator access is needed to install packages.\n'
 fi
 
-build_vpa() (
-  cd "$ROOT" && CGO_ENABLED=0 go build -ldflags="-s -w" -o vpa ./cmd/vpa
-)
+step "adding the repository at $REPO_URL"
+if [[ -r "$REPO_CONF" ]] && grep -qF "repository=$REPO_URL" "$REPO_CONF" 2>/dev/null; then
+  step "repository already configured in $REPO_CONF"
+else
+  write_repo_conf() {
+    printf 'repository=%s\n' "$REPO_URL" | sudo tee "$REPO_CONF" >/dev/null
+  }
+  quietly "couldn't write $REPO_CONF" write_repo_conf
+  step "wrote $REPO_CONF"
+fi
 
-step "building vpa"
-quietly "the build failed" build_vpa
+# Importing the signing key is a yes/no prompt the first time. Under
+# `curl | bash` the script itself is stdin, so xbps would read EOF and fail
+# with "Resource temporarily unavailable" -- the prompt has to be pointed at
+# the terminal explicitly. Opening /dev/tty is the test: it can exist and
+# still fail to open when there is no controlling terminal.
+key_trusted() {
+  sudo xbps-query --repository="$REPO_URL" -R vpa >/dev/null 2>&1
+}
 
-mkdir -p "$BIN_DIR"
-ln -sf "$ROOT/vpa" "$BIN_DIR/vpa"
-step "linked $BIN_DIR/vpa -> $ROOT/vpa"
+if ! key_trusted; then
+  printf '\nThe repository is signed with this key:\n  %s\n' "$REPO_FINGERPRINT"
+  printf 'xbps will ask you to trust it.\n\n'
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    sudo xbps-install -S <&3 || true
+    exec 3<&-
+  else
+    # shellcheck disable=SC2024  # $LOG is user-owned; this shell should write it
+    sudo xbps-install -S >>"$LOG" 2>&1 || true
+  fi
+fi
 
-CONF_DIR="$HOME/.config/vpa"
-CONF_FILE="$CONF_DIR/vpa.conf"
-if [[ ! -e "$CONF_FILE" ]]; then
-  mkdir -p "$CONF_DIR"
-  cat > "$CONF_FILE" <<'EOF'
-# vpa configuration. Shell-sourced: KEY=value, one per line.
+step "installing vpa"
+pkgs=(vpa)
+if [[ $WITH_AUR -eq 1 ]]; then
+  pkgs+=("${EXTRA_DEPS[@]}")
+  step "including AUR build tools: ${EXTRA_DEPS[*]}"
+fi
+
+if ! quietly_out=$(sudo xbps-install -Sy "${pkgs[@]}" 2>&1); then
+  printf '\n'
+  warn "installing vpa failed"
+  printf -- '--- output ---\n' >&2
+  printf '%s\n' "$quietly_out" | tail -n 30 >&2
+  if printf '%s' "$quietly_out" | grep -q 'not signed\|signature\|pubkey'; then
+    warn "the repository's key was not trusted -- re-run this script from a terminal"
+  fi
+  exit 1
+fi
+[[ $VERBOSE -eq 1 ]] && printf '%s\n' "$quietly_out"
+
+command -v vpa >/dev/null 2>&1 || die "vpa installed but isn't on PATH -- expected /usr/bin/vpa"
+
+# Confirm the package file xbps downloaded matches the checksum published
+# alongside it.
 #
-# NOCONFIRM=1        # never prompt for confirmation (same as passing --noconfirm)
-# EDITOR=vim         # open PKGBUILDs in this editor when --edit is passed (falls back to $EDITOR/$VISUAL)
-# CLEAN_AFTER=1      # remove a package's build directory after a successful install
-EOF
-  step "wrote default config to $CONF_FILE"
+# This is not what makes the repository trustworthy: xbps already checks a
+# SHA256 from the repodata and an RSA signature against a key you trusted, and
+# both the packages and this list come from the same server, so it cannot
+# detect a compromised origin. What it does catch is a truncated download, a
+# corrupted cache, or a mirror serving something stale -- and it makes the
+# expected value visible so it can be compared elsewhere.
+verify_sha256() {
+  command -v sha256sum >/dev/null 2>&1 || { step "sha256sum unavailable, skipping"; return 0; }
+
+  local arch pkgver cached sums expected actual
+  arch=$(xbps-uhelper arch 2>/dev/null) || return 0
+  pkgver=$(xbps-query -p pkgver vpa 2>/dev/null) || return 0
+  cached="/var/cache/xbps/${pkgver}.${arch}.xbps"
+
+  if [[ ! -r "$cached" ]]; then
+    # Already installed at this version, so nothing was downloaded.
+    step "no cached package to check for $pkgver"
+    return 0
+  fi
+
+  sums=$(curl -fsSL --max-time 30 "$REPO_URL/sha256sums.txt" 2>/dev/null) || {
+    warn "couldn't fetch sha256sums.txt -- skipping the checksum check"
+    return 0
+  }
+  expected=$(printf '%s\n' "$sums" | awk -v f="${pkgver}.${arch}.xbps" '$2 == f {print $1}')
+  if [[ -z "$expected" ]]; then
+    step "no published checksum for ${pkgver}.${arch}.xbps"
+    return 0
+  fi
+
+  actual=$(sha256sum "$cached" | cut -d' ' -f1)
+  if [[ "$actual" != "$expected" ]]; then
+    warn "SHA256 MISMATCH for ${pkgver}.${arch}.xbps"
+    warn "  expected $expected"
+    warn "  got      $actual"
+    die "the downloaded package does not match what the repository published"
+  fi
+  step "sha256 verified: ${expected:0:16}... for ${pkgver}.${arch}.xbps"
+  SHA_VERIFIED=1
+}
+
+SHA_VERIFIED=0
+verify_sha256
+
+VERSION=$(vpa --version 2>/dev/null || echo vpa)
+if [[ $SHA_VERIFIED -eq 1 ]]; then
+  printf '%sDone.%s %s (sha256 verified)\n' "$c_green" "$c_reset" "$VERSION"
+else
+  printf '%sDone.%s %s\n' "$c_green" "$c_reset" "$VERSION"
 fi
 
-VERSION=$("$ROOT/vpa" --version 2>/dev/null || echo vpa)
-printf '%sDone.%s %s\n' "$c_green" "$c_reset" "$VERSION"
+# A leftover source install from an earlier version of this script would
+# shadow the packaged one and keep being what actually runs.
+for stale in "$HOME/.local/bin/vpa" /usr/local/bin/vpa; do
+  if [[ -e "$stale" && "$(command -v vpa)" != "/usr/bin/vpa" ]]; then
+    warn "'$stale' comes earlier in your PATH than the package, so that's what runs."
+    warn "remove it with: rm $stale"
+  fi
+done
 
-# Kept loud: without this the command simply won't be found, which looks
-# like the install failing rather than a PATH problem.
-on_path=1
-case ":$PATH:" in
-  *":$BIN_DIR:"*) : ;;
-  *) on_path=0
-     warn "$BIN_DIR is not on your PATH -- add this to your shell rc:
-    export PATH=\"$BIN_DIR:\$PATH\"" ;;
-esac
-
-# An xbps-managed vpa earlier in PATH would keep being the one that runs.
-if command -v xbps-query >/dev/null 2>&1 && xbps-query vpa >/dev/null 2>&1; then
-  warn "the vpa package is also installed; whichever comes first in PATH is the one you'll run"
-fi
-
-# Only worth saying to someone who hasn't run it before -- and only once
-# the command will actually resolve, since the PATH warning above already
-# tells them what to do about it.
-if [[ $FIRST_INSTALL -eq 1 && $on_path -eq 1 ]]; then
+if [[ $FIRST_INSTALL -eq 1 ]]; then
   printf '\nTo get started, run "vpa" in your terminal\n'
 fi

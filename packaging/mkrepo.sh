@@ -124,6 +124,14 @@ for arch in "${ARCHES[@]}"; do
 done
 ok "indexed and signed"
 
+# A checksum list over the packages. xbps already verifies a SHA256 from the
+# repodata and an RSA signature per package, so this is not what makes the
+# repository trustworthy -- it is here so the install script can confirm the
+# bytes it ended up with match what was published, and so anyone can check a
+# package by hand without xbps.
+( cd "$REPO_DIR" && sha256sum ./*.xbps | sed 's| \./| |' > sha256sums.txt )
+ok "wrote sha256sums.txt ($(wc -l < "$REPO_DIR/sha256sums.txt") packages)"
+
 echo
 ok "repository ready at $REPO_DIR"
 find "$REPO_DIR" -name '*-repodata' -printf '  %f\n' | sort
