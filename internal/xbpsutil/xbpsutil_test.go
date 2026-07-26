@@ -51,3 +51,20 @@ func trimSpace(s string) string {
 	}
 	return s
 }
+
+func TestSplitPkgver(t *testing.T) {
+	cases := []struct{ in, name, version string }{
+		{"firefox-153.0_1", "firefox", "153.0_1"},
+		// pkgnames legitimately contain dashes and digits.
+		{"otter-browser-1.0.03_1", "otter-browser", "1.0.03_1"},
+		{"font-firacode-6.2_2", "font-firacode", "6.2_2"},
+		{"libio.elementary.files-devel-6.5.3_1", "libio.elementary.files-devel", "6.5.3_1"},
+		{"nodash", "nodash", ""},
+	}
+	for _, tc := range cases {
+		name, version := splitPkgver(tc.in)
+		if name != tc.name || version != tc.version {
+			t.Errorf("splitPkgver(%q) = (%q, %q), want (%q, %q)", tc.in, name, version, tc.name, tc.version)
+		}
+	}
+}

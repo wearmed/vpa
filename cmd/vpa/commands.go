@@ -44,6 +44,10 @@ func (a *App) cmdSearch(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: vpa search <term>")
 	}
+	// `vpa search cat browser` browses a category instead of matching text.
+	if isCategoryWord(args[0]) {
+		return a.cmdSearchCategory(args[1:])
+	}
 	term := args[0]
 
 	// Both lookups are independent; run them together so the AUR round trip
@@ -91,7 +95,7 @@ func (a *App) cmdSearch(args []string) error {
 		if xbpsutil.IsInstalled(p.Name) {
 			mark = " [installed]"
 		}
-		fmt.Printf("%s %s%s\n", ui.Bold("aur/"+p.Name), p.Version, mark)
+		fmt.Printf("%s %s%s%s\n", ui.Bold("aur/"+p.Name), p.Version, mark, aurHealthNote(p, a.Cfg.StaleDays))
 		if p.Description != "" {
 			fmt.Printf("    %s\n", p.Description)
 		}
@@ -311,6 +315,9 @@ func (a *App) cmdInstall(pkgs []string) error {
 			if e, known := tracked.Get(name); known && e.Version == p.Version && xbpsutil.IsInstalled(name) {
 				ui.Ok("%s %s is already installed and up to date", name, e.Version)
 				continue
+			}
+			if err := a.confirmAURHealth(p); err != nil {
+				return err
 			}
 			addBase(p.PackageBase)
 			continue

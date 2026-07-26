@@ -36,6 +36,7 @@ vpa sync    (sy)                 refresh repository data only
 
 FINDING THINGS
 vpa search  (s)  <term>          search Void's repos, the AUR + Flathub
+vpa search cat <category>        browse a category (bare 'cat' lists them)
 vpa info         <pkg>           details from Void's repos, AUR or Flathub
 vpa list    (ls) [--aur]         list installed packages and Flatpaks
 vpa filelist (fl) <pkg>          files a package installs
@@ -89,6 +90,46 @@ same way, showing a package from whichever side it exists on — or both.
 `vpa list` shows every installed package on the system, tagging the ones vpa
 built from the AUR and any Flatpak applications; `vpa list --aur` narrows it
 to just the AUR ones.
+
+### Categories
+
+`vpa search cat browser` lists every browser you can actually install —
+across Void's repos, the AUR and Flathub at once. `vpa search cat` on its
+own lists the ~70 categories available (`games`, `development`, `social`,
+`entertainment`, `dewm`, `editor`, `terminal`, and so on).
+
+This is worth having because a plain text search is noisy: searching Void
+for "browser" also turns up `RcloneBrowser`, `browserpass`, `sqlitebrowser`
+and a pile of WebKit libraries, while missing Brave and LibreWolf entirely
+because those live in the AUR.
+
+Categories are curated rather than detected — neither xbps nor the AUR
+records what kind of thing a package is. Flathub *does*, via AppStream, so
+when `appstreamcli` is installed the Flatpak side of a category is pulled
+live from Flathub's own metadata instead of a fixed list. Names that don't
+exist are silently skipped, so a list can name something Void has since
+dropped without you ever seeing a dead entry.
+
+The list ships inside the binary, refreshes itself from the repo weekly, and
+you can override or extend it in `~/.config/vpa/categories.conf`:
+
+```
+browser|browsers|web @WebBrowser: firefox chromium librewolf-bin
+mystuff: some-package another-package
+```
+
+A category you define replaces the built-in one of that name, so copy a line
+before editing it. `CATEGORY_URL=` in `vpa.conf` points the refresh
+somewhere else.
+
+### Neglected AUR packages
+
+Nobody vets the AUR. When a package is orphaned, flagged out of date, or
+hasn't been touched in a month, `vpa search` marks it and `vpa install` asks
+a second time before building it — separate from the build-script review,
+because "do I trust this code" and "is this package still alive" are
+different questions. `STALE_DAYS=` in `vpa.conf` changes the month, or set
+it to `0` to only ever warn about orphaned and out-of-date packages.
 
 ### Flatpak
 

@@ -71,6 +71,7 @@ func canonicalCommand(name string) string {
 
 var commandHelp = map[string]string{
 	"search": `vpa search (s) <term>
+vpa search cat <category>
 
 Search Void's repositories, the AUR and Flathub at the same time. Void
 results come first -- a native package is nearly always the better
@@ -78,6 +79,22 @@ choice when one exists. Anything you already have is marked
 [installed].
 
   vpa search firefox
+
+Searching a category shows you what's out there when you know the kind
+of thing you want but not its name. 'cat' with no category after it
+lists every category there is.
+
+  vpa search cat browser
+  vpa search cat games
+  vpa search cat
+
+AUR results carry a warning when a package looks neglected -- orphaned,
+flagged out of date, or untouched for a long time.
+
+Categories are curated rather than detected: nothing in xbps or the AUR
+records what kind of thing a package is. vpa ships a list, refreshes it
+from the server weekly, and you can add your own in
+~/.config/vpa/categories.conf.
 `,
 	"info": `vpa info <pkg>
 

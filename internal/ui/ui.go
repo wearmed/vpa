@@ -79,6 +79,16 @@ func Confirm(format string, a ...any) bool {
 		Info("%s [auto-yes: --noconfirm]", prompt)
 		return true
 	}
+	return confirm(prompt)
+}
+
+// ConfirmAlways is Confirm, but ignores NoConfirm -- for a decision that
+// isn't a routine confirmation, like installing an abandoned AUR package.
+func ConfirmAlways(format string, a ...any) bool {
+	return confirm(fmt.Sprintf(format, a...))
+}
+
+func confirm(prompt string) bool {
 	fmt.Fprintf(os.Stderr, "%s [y/N] ", prompt)
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')

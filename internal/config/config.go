@@ -19,6 +19,10 @@ type Config struct {
 	ConfigDir    string
 	ConfigFile   string
 	UserDepmap   string
+	// CategoryCache is the copy fetched from CategoryURL; UserCategories is
+	// the user's own additions, which win over both it and the built-in list.
+	CategoryCache  string
+	UserCategories string
 
 	NoConfirm     bool
 	TrustAUR      bool
@@ -28,6 +32,10 @@ type Config struct {
 	CleanAfter    bool
 	Editor        string
 	Parallel      int
+	CategoryURL   string
+	// StaleDays is how long an AUR package can go without an update before
+	// installing it asks a second time. 0 disables the extra prompt.
+	StaleDays int
 }
 
 const (
@@ -65,8 +73,14 @@ func Load() (*Config, error) {
 		ConfigDir:    configDir,
 		ConfigFile:   filepath.Join(configDir, "vpa.conf"),
 		UserDepmap:   filepath.Join(configDir, "depmap.conf"),
-		Editor:       firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"), "vi"),
-		Parallel:     4,
+
+		CategoryCache:  filepath.Join(cacheDir, "categories.conf"),
+		UserCategories: filepath.Join(configDir, "categories.conf"),
+
+		Editor:   firstNonEmpty(os.Getenv("EDITOR"), os.Getenv("VISUAL"), "vi"),
+		Parallel: 4,
+		// An AUR package untouched for a month gets a second prompt.
+		StaleDays: 30,
 		// Routine confirmations default to yes; toggle with
 		// `vpa --assumeno` (or NOCONFIRM=0 in the config file).
 		NoConfirm: true,
@@ -126,6 +140,12 @@ func (c *Config) loadFile() error {
 		case "PARALLEL_DOWNLOADS":
 			if n, err := strconv.Atoi(val); err == nil && n > 0 {
 				c.Parallel = n
+			}
+		case "CATEGORY_URL":
+			c.CategoryURL = val
+		case "STALE_DAYS":
+			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+				c.StaleDays = n
 			}
 		}
 	}

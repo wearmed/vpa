@@ -242,6 +242,59 @@ type RepoPackage struct {
 // dashes and digits.
 var searchLineRe = regexp.MustCompile(`^\[([*-])\]\s+(\S+)\s*(.*)$`)
 
+// RepoPackagesByName looks up an exact set of package names in one pass.
+//
+// Searching per name would mean one full repository scan each; the empty
+// pattern lists everything once, which is a single scan no matter how many
+// names are being looked for. Names that don't exist are simply absent from
+// the result -- that's the normal case for a category list, not an error.
+func RepoPackagesByName(names []string) ([]RepoPackage, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	want := make(map[string]bool, len(names))
+	for _, n := range names {
+		want[n] = true
+	}
+
+	// The empty pattern matches every package, so the name/version split is
+	// done here rather than handing ~20k pkgvers to xbps-uhelper in one
+	// argv. splitPkgver is the same rule xbps itself uses.
+	out, err := sysutil.Output("xbps-query", "-Rs", "")
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []RepoPackage
+	for _, line := range strings.Split(out, "\n") {
+		m := searchLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		name, version := splitPkgver(m[2])
+		if !want[name] {
+			continue
+		}
+		pkgs = append(pkgs, RepoPackage{
+			Name:      name,
+			Version:   version,
+			Desc:      strings.TrimSpace(m[3]),
+			Installed: m[1] == "*",
+		})
+	}
+	return pkgs, nil
+}
+
+// splitPkgver splits "foo-bar-1.2.3_1" into "foo-bar" and "1.2.3_1". A
+// pkgname may contain dashes, but the revision suffix never does, so the
+// last dash is always the boundary.
+func splitPkgver(pkgver string) (name, version string) {
+	i := strings.LastIndex(pkgver, "-")
+	if i < 0 {
+		return pkgver, ""
+	}
+	return pkgver[:i], pkgver[i+1:]
+}
+
 // SearchRepos searches Void's configured repositories. Deliberately does
 // not include vpa's local build repo: that's an internal staging area, and
 // including it would label AUR packages vpa happens to have built as

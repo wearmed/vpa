@@ -13,8 +13,9 @@ import (
 	"vpa/internal/ui"
 )
 
-// Version is bumped by +0.1 for a feature release and +0.01 for a bugfix.
-const Version = "1.12"
+// Version: a feature release bumps the tenths and clears the hundredths
+// (1.12 -> 1.2), a bugfix adds a hundredth (1.2 -> 1.21).
+const Version = "1.2"
 
 func usageText() string {
 	return `vpa by wearmed
@@ -23,23 +24,21 @@ the universal void linux package manager
   vpa install <name>     install something
   vpa remove  <name>     uninstall something
   vpa search  <term>     find something to install
+  vpa search cat <what>  browse by category, e.g. browser, games
   vpa info    <name>     what is this package?
   vpa list               what do I have installed?
   vpa update             update everything
 
 Getting started:
 
-  vpa search browser     see what's available
-  vpa install firefox    install it
-  vpa update             keep everything current
+  vpa search cat browser  see every browser you can install
+  vpa install firefox     install it
+  vpa update              keep everything current
 
-vpa installs from Void's own repositories, the AUR, Flathub, and
-.xbps/.deb/.rpm package files -- you don't have to know which is which,
-just name what you want.
+Just name what you want -- vpa finds it, wherever it lives.
 
-vpa assumes yes and gets on with it. "vpa --assumeno" makes it ask first
-(and "vpa --assumeyes" switches back) -- either way it still shows you an
-AUR build script it hasn't seen before, since that runs someone else's code.
+It won't pester you either: it assumes yes, and only stops to ask when
+something's genuinely worth a look.
 
   vpa help <command>     how a specific command works
   vpa help --all         every command vpa has
@@ -72,6 +71,7 @@ sync (sy)                     - Refresh repository data only
 
 FINDING THINGS:
 search (s) <term>             - Search Void's repos, the AUR and Flathub
+search cat <category>         - Browse a category (no name lists them all)
 info <pkg>                    - Show details for a package
 list (ls) [--aur]             - List installed packages (incl. Flatpaks)
 filelist (fl) <pkg>           - List the files a package installs
@@ -115,7 +115,9 @@ OPTIONS:
 
 CONFIG FILE:
 ~/.config/vpa/vpa.conf (NOCONFIRM=1, EDITOR=..., CLEAN_AFTER=1,
-                        TRUST_AUR=1, PREFER_FLATPAK=1, PARALLEL_DOWNLOADS=N)
+                        TRUST_AUR=1, PREFER_FLATPAK=1, PARALLEL_DOWNLOADS=N,
+                        STALE_DAYS=30, CATEGORY_URL=...)
+~/.config/vpa/categories.conf  - your own search categories
 `, Version, xbpsVer)
 }
 

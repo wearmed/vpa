@@ -27,6 +27,21 @@ type Package struct {
 	NumVotes     int
 	Popularity   float64
 	LastModified int64
+	// OutOfDate is when someone flagged the package as out of date, or 0.
+	// The RPC sends null rather than 0 when it isn't flagged.
+	OutOfDate int64
+}
+
+// Orphaned reports whether nobody maintains the package. The AUR leaves
+// Maintainer empty when a package has been given up on.
+func (p Package) Orphaned() bool { return p.Maintainer == "" }
+
+// StaleFor reports how long it's been since the package was last touched.
+func (p Package) StaleFor(now time.Time) time.Duration {
+	if p.LastModified == 0 {
+		return 0
+	}
+	return now.Sub(time.Unix(p.LastModified, 0))
 }
 
 type rpcResponse struct {
