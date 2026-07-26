@@ -81,7 +81,20 @@ fi
 # xbps missing means nothing after this point can work.
 if [[ -r /etc/os-release ]] && ! grep -Eq '^ID="?void"?$' /etc/os-release; then
   warn "this doesn't look like Void Linux -- vpa relies on xbps and won't work anywhere else"
-  read -r -p "continue anyway? [y/N] " reply
+  # Piped through `curl | bash`, stdin is the script itself, so a plain
+  # read hits EOF immediately: the prompt would be skipped, and under
+  # `set -e` the non-zero return would kill the script with no message.
+  # Ask the terminal directly, and refuse rather than assume when there
+  # isn't one.
+  reply=""
+  # Opening it is the only real test: /dev/tty can exist and still fail to
+  # open when there's no controlling terminal (cron, a container, CI).
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    read -r -p "continue anyway? [y/N] " reply <&3 || reply=""
+    exec 3<&-
+  else
+    warn "no terminal to ask on -- re-run without piping if you meant to continue"
+  fi
   [[ "$reply" =~ ^[Yy]$ ]] || exit 1
 fi
 command -v xbps-install >/dev/null 2>&1 || die "xbps-install not found -- is this really Void Linux?"
