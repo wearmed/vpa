@@ -222,6 +222,20 @@ verify_sha256() {
     warn "SHA256 MISMATCH for ${pkgver}.${arch}.xbps"
     warn "  expected $expected"
     warn "  got      $actual"
+
+    # The package is already installed by this point, so failing without
+    # undoing it would leave the machine running the very binary that
+    # failed verification. Remove it, and drop the cached file too so a
+    # retry fetches a fresh copy rather than re-checking the same bad one.
+    say "Removing the package that failed verification..."
+    # shellcheck disable=SC2024  # $LOG is user-owned; this shell should write it
+    if sudo xbps-remove -y vpa >>"$LOG" 2>&1; then
+      step "removed vpa"
+    else
+      warn "couldn't remove it automatically -- run: sudo xbps-remove vpa"
+    fi
+    sudo rm -f "$cached" "$cached.sig2" 2>/dev/null || true
+
     die "the downloaded package does not match what the repository published"
   fi
   step "sha256 verified: ${expected:0:16}... for ${pkgver}.${arch}.xbps"
