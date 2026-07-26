@@ -57,7 +57,19 @@ quietly() {
   fi
 }
 
-printf 'Installing VPA...\n'
+# Decided before anything is written, since the symlink this looks for is
+# one of the things the install creates. A packaged vpa counts too: the
+# result is still an existing install being replaced, not a first one.
+FIRST_INSTALL=1
+if [[ -e "$BIN_DIR/vpa" ]] || command -v vpa >/dev/null 2>&1; then
+  FIRST_INSTALL=0
+fi
+
+if [[ $FIRST_INSTALL -eq 1 ]]; then
+  printf 'Installing VPA...\n'
+else
+  printf 'Upgrading and reinstalling VPA...\n'
+fi
 
 # When run locally from a checkout, build in place; when piped via curl
 # (no usable $BASH_SOURCE path), fetch/update a persistent clone instead.
@@ -145,13 +157,22 @@ printf '%sDone.%s %s\n' "$c_green" "$c_reset" "$VERSION"
 
 # Kept loud: without this the command simply won't be found, which looks
 # like the install failing rather than a PATH problem.
+on_path=1
 case ":$PATH:" in
   *":$BIN_DIR:"*) : ;;
-  *) warn "$BIN_DIR is not on your PATH -- add this to your shell rc:
+  *) on_path=0
+     warn "$BIN_DIR is not on your PATH -- add this to your shell rc:
     export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
 
 # An xbps-managed vpa earlier in PATH would keep being the one that runs.
 if command -v xbps-query >/dev/null 2>&1 && xbps-query vpa >/dev/null 2>&1; then
   warn "the vpa package is also installed; whichever comes first in PATH is the one you'll run"
+fi
+
+# Only worth saying to someone who hasn't run it before -- and only once
+# the command will actually resolve, since the PATH warning above already
+# tells them what to do about it.
+if [[ $FIRST_INSTALL -eq 1 && $on_path -eq 1 ]]; then
+  printf '\nTo get started, run "vpa" in your terminal\n'
 fi
