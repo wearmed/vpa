@@ -77,27 +77,30 @@ if [[ -z "$ROOT" || ! -f "$ROOT/go.mod" || ! -d "$ROOT/cmd/vpa" ]]; then
   ROOT="$SRC_DIR"
 fi
 
-# Never silent: continuing on a non-Void system is the user's call, and
-# xbps missing means nothing after this point can work.
-if [[ -r /etc/os-release ]] && ! grep -Eq '^ID="?void"?$' /etc/os-release; then
-  warn "this doesn't look like Void Linux -- vpa relies on xbps and won't work anywhere else"
-  # Piped through `curl | bash`, stdin is the script itself, so a plain
-  # read hits EOF immediately: the prompt would be skipped, and under
-  # `set -e` the non-zero return would kill the script with no message.
-  # Ask the terminal directly, and refuse rather than assume when there
-  # isn't one.
-  reply=""
-  # Opening it is the only real test: /dev/tty can exist and still fail to
-  # open when there's no controlling terminal (cron, a container, CI).
-  if { exec 3</dev/tty; } 2>/dev/null; then
-    read -r -p "continue anyway? [y/N] " reply <&3 || reply=""
-    exec 3<&-
-  else
-    warn "no terminal to ask on -- re-run without piping if you meant to continue"
-  fi
-  [[ "$reply" =~ ^[Yy]$ ]] || exit 1
+# vpa drives xbps and expects runit services, so anything else is a hard
+# stop rather than a warning -- there is no partial success to salvage.
+refuse() {
+  [[ $VERBOSE -eq 1 ]] && warn "$1"
+  die "Please run the script from Void Linux"
+}
+
+# /etc/os-release is parsed rather than sourced: it's shell syntax, but
+# executing a file just to read one field is a habit worth not having.
+os_id=""
+[[ -r /etc/os-release ]] && os_id=$(sed -n 's/^ID="\?\([^"]*\)"\?$/\1/p' /etc/os-release | head -1)
+[[ "$os_id" == "void" ]] || refuse "ID in /etc/os-release is '${os_id:-unset}', not 'void'"
+
+command -v xbps-install >/dev/null 2>&1 || refuse "xbps-install not found"
+
+# PID 1's name is the direct answer, and /proc needs no extra package --
+# ps is only a fallback for the odd system without /proc mounted.
+init=""
+if [[ -r /proc/1/comm ]]; then
+  init=$(tr -d '\0\n' < /proc/1/comm)
+elif command -v ps >/dev/null 2>&1; then
+  init=$(ps -p 1 -o comm= 2>/dev/null | tr -d ' ')
 fi
-command -v xbps-install >/dev/null 2>&1 || die "xbps-install not found -- is this really Void Linux?"
+[[ "$init" == "runit" ]] || refuse "init system is '${init:-unknown}', not runit"
 
 step "checking build-time dependencies"
 missing=()
