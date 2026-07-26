@@ -1,4 +1,4 @@
-// vpa by wearmed -- the universal void linux package manager.
+// vpa by Suraj -- the endgame Void Linux package manager.
 package main
 
 import (
@@ -18,8 +18,8 @@ import (
 const Version = "1.22"
 
 func usageText() string {
-	return `vpa by wearmed
-the universal void linux package manager
+	return `vpa by Suraj
+the endgame Void Linux package manager
 
 COMMANDS:
   vpa install <name>      install something
@@ -41,6 +41,7 @@ FLAGS:
 HELP:
   vpa help <command>      how one command works
   vpa help --all          every command and flag
+  https://vpa.wearmed.xyz docs, guides and the package repository
 `
 }
 
@@ -50,8 +51,8 @@ func usageFullText() string {
 	if xbpsVer == "" {
 		xbpsVer = "unknown"
 	}
-	return fmt.Sprintf(`vpa by wearmed
-the universal void linux package manager
+	return fmt.Sprintf(`vpa by Suraj
+the endgame Void Linux package manager
 vpa version: %s   XBPS version: %s
 
 USAGE:
@@ -117,6 +118,10 @@ CONFIG FILE:
                         TRUST_AUR=1, PREFER_FLATPAK=1, PARALLEL_DOWNLOADS=N,
                         STALE_DAYS=30, CATEGORY_URL=...)
 ~/.config/vpa/categories.conf  - your own search categories
+
+MORE:
+https://vpa.wearmed.xyz           - docs, guides and the package repository
+https://git.wearmed.xyz/suraj/vpa - source code
 `, Version, xbpsVer)
 }
 

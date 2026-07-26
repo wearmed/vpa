@@ -1,6 +1,8 @@
 # vpa
 
-**V**oid **P**ackage **A**ssistant — the only Void package manager you'll need.
+**V**oid **P**ackage **A**ssistant — the endgame Void Linux package manager.
+
+Website and docs: **[vpa.wearmed.xyz](https://vpa.wearmed.xyz)**
 
 One tool for everything you install on Void: your normal `xbps` packages, the
 [AUR](https://aur.archlinux.org), Flatpaks from Flathub, standalone `.xbps`
