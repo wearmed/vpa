@@ -51,32 +51,25 @@ func LooksLikeAppID(name string) bool {
 	return !strings.ContainsAny(name, "/\\ ")
 }
 
-// Search queries the configured remotes. Flatpak exits non-zero when
-// nothing matches, which isn't an error worth surfacing.
+// Search queries the configured remotes.
+//
+// A no-match is not an error: flatpak exits 0 and prints "No matches found"
+// on stdout. That line is rejected by requiring a real application ID
+// rather than by matching the message, which would break under any locale
+// but English.
 func Search(term string) ([]App, error) {
 	out, err := sysutil.Output("flatpak", "search", "--columns=application,version,description", term)
 	if err != nil {
 		return nil, nil
 	}
-	var apps []App
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if line == "" {
-			continue
+	return parseColumns(out, func(a *App, col int, val string) {
+		switch col {
+		case 1:
+			a.Version = val
+		case 2:
+			a.Desc = val
 		}
-		fields := strings.Split(line, "\t")
-		if len(fields) < 1 || fields[0] == "" {
-			continue
-		}
-		a := App{ID: fields[0]}
-		if len(fields) > 1 {
-			a.Version = fields[1]
-		}
-		if len(fields) > 2 {
-			a.Desc = fields[2]
-		}
-		apps = append(apps, a)
-	}
-	return apps, nil
+	}), nil
 }
 
 // List returns installed applications. Runtimes and extensions are
@@ -87,22 +80,37 @@ func List() ([]App, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseColumns(out, func(a *App, col int, val string) {
+		switch col {
+		case 1:
+			a.Version = val
+		case 2:
+			a.Origin = val
+		}
+	}), nil
+}
+
+// parseColumns turns flatpak's tab-separated --columns output into apps,
+// calling assign for each column after the ID.
+//
+// Every line has to start with something that looks like an application ID.
+// That drops flatpak's human-readable chatter -- notably the "No matches
+// found" it prints on stdout while still exiting 0 -- without matching on
+// the message text, which only holds in an English locale.
+func parseColumns(out string, assign func(a *App, col int, val string)) []App {
 	var apps []App
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if line == "" {
+		fields := strings.Split(strings.TrimSpace(line), "\t")
+		if !LooksLikeAppID(fields[0]) {
 			continue
 		}
-		fields := strings.Split(line, "\t")
 		a := App{ID: fields[0]}
-		if len(fields) > 1 {
-			a.Version = fields[1]
-		}
-		if len(fields) > 2 {
-			a.Origin = fields[2]
+		for i := 1; i < len(fields); i++ {
+			assign(&a, i, fields[i])
 		}
 		apps = append(apps, a)
 	}
-	return apps, nil
+	return apps
 }
 
 // IsInstalled reports whether an app ID is installed.

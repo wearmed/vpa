@@ -15,7 +15,7 @@ import (
 
 // Version: a feature release bumps the tenths and clears the hundredths
 // (1.12 -> 1.2), a bugfix adds a hundredth (1.2 -> 1.21).
-const Version = "1.21"
+const Version = "1.22"
 
 func usageText() string {
 	return `vpa by wearmed
