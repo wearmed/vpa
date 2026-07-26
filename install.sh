@@ -7,9 +7,9 @@
 # ordinary xbps package that upgrades with the rest of the system. Nothing
 # is built and nothing is written outside xbps's control.
 #
-# Quiet by default: one line while it works, one when it's done. Anything
-# needing a decision, or anything that has gone wrong, still speaks up, and
-# --verbose shows every step.
+# Says what it is doing, one short line per step, without turning into a
+# log. Anything needing a decision, or anything that has gone wrong, still
+# speaks up, and --verbose adds the detail underneath each step.
 set -euo pipefail
 
 REPO_URL="${VPA_REPO_URL:-https://vpa.wearmed.xyz/repo}"
@@ -28,20 +28,27 @@ EXTRA_DEPS=(git fakeroot bsdtar xz zstd bzip2 base-devel)
 c_red=$'\e[31m'; c_green=$'\e[32m'; c_yellow=$'\e[33m'; c_blue=$'\e[34m'; c_reset=$'\e[0m'
 VERBOSE=0
 WITH_AUR=1
+FORCE=0
 
 for arg in "$@"; do
   case "$arg" in
     --verbose|-v)  VERBOSE=1 ;;
     --minimal)     WITH_AUR=0 ;;
+    --force)       FORCE=1 ;;
     --help|-h)
-      printf 'usage: install.sh [--minimal] [--verbose]\n\n'
+      printf 'usage: install.sh [--minimal] [--force] [--verbose]\n\n'
       printf '  --minimal  install vpa alone, without the AUR build tools\n'
+      printf '  --force    run even if vpa is already installed\n'
       printf '  --verbose  show every step\n'
       exit 0 ;;
   esac
 done
 
-step() { [[ $VERBOSE -eq 1 ]] && printf '%s::%s %s\n' "$c_blue" "$c_reset" "$*"; return 0; }
+# say is the running commentary: one short line per thing being done, so
+# the install accounts for itself without turning into a log.
+say()  { printf '  %s\n' "$*"; }
+# step is the detail underneath that, shown only with --verbose.
+step() { [[ $VERBOSE -eq 1 ]] && printf '%s  ::%s %s\n' "$c_blue" "$c_reset" "$*"; return 0; }
 warn() { printf '%s:: warning:%s %s\n' "$c_yellow" "$c_reset" "$*" >&2; }
 die()  { printf '%s:: error:%s %s\n' "$c_red" "$c_reset" "$*" >&2; exit 1; }
 
@@ -65,18 +72,19 @@ quietly() {
   fi
 }
 
-# Decided before anything is changed, since installing is what makes it
-# true. Covers a source install too, which this script used to create.
-FIRST_INSTALL=1
-if command -v vpa >/dev/null 2>&1 || xbps-query vpa >/dev/null 2>&1; then
-  FIRST_INSTALL=0
+# This script only installs. Upgrading is xbps's job once the repository is
+# configured, so re-running it on a working install has nothing to do --
+# and doing it anyway would re-prompt for a password and reinstall packages
+# for no reason.
+if [[ $FORCE -eq 0 ]] && { command -v vpa >/dev/null 2>&1 || xbps-query vpa >/dev/null 2>&1; }; then
+  installed=$(vpa --version 2>/dev/null || xbps-query -p pkgver vpa 2>/dev/null || echo vpa)
+  printf 'VPA is already installed (%s).\n\n' "$installed"
+  printf 'Run "vpa" to get started, or "vpa update" to upgrade it.\n'
+  printf 'Pass --force to run the installer anyway.\n'
+  exit 0
 fi
 
-if [[ $FIRST_INSTALL -eq 1 ]]; then
-  printf 'Installing VPA...\n'
-else
-  printf 'Upgrading and reinstalling VPA...\n'
-fi
+printf 'Installing VPA...\n'
 
 # vpa drives xbps and expects runit services, so anything else is a hard
 # stop rather than a warning -- there is no partial success to salvage.
@@ -107,15 +115,18 @@ fi
 # rather than failing partway through.
 command -v sudo >/dev/null 2>&1 || die "sudo is required to install packages"
 
-# Announced even when quiet: this asks for a password.
+# Announced before the prompt appears, so the password request isn't a
+# surprise arriving under a silent progress line.
 if ! sudo -n true 2>/dev/null; then
-  printf 'Administrator access is needed to install packages.\n'
+  say "Administrator access is needed to install packages."
 fi
 
-step "adding the repository at $REPO_URL"
 if [[ -r "$REPO_CONF" ]] && grep -qF "repository=$REPO_URL" "$REPO_CONF" 2>/dev/null; then
-  step "repository already configured in $REPO_CONF"
+  say "Repository already added."
+  step "already configured in $REPO_CONF"
 else
+  say "Adding the repository..."
+  step "$REPO_URL -> $REPO_CONF"
   write_repo_conf() {
     printf 'repository=%s\n' "$REPO_URL" | sudo tee "$REPO_CONF" >/dev/null
   }
@@ -128,11 +139,16 @@ fi
 # with "Resource temporarily unavailable" -- the prompt has to be pointed at
 # the terminal explicitly. Opening /dev/tty is the test: it can exist and
 # still fail to open when there is no controlling terminal.
+# Querying a repository does not need its key -- only installing from one
+# does -- so asking xbps whether it can see the package says nothing about
+# trust. The imported key is a file named after its fingerprint, so look for
+# exactly the key this script expects.
 key_trusted() {
-  sudo xbps-query --repository="$REPO_URL" -R vpa >/dev/null 2>&1
+  [[ -e "/var/db/xbps/keys/${REPO_FINGERPRINT}.plist" ]]
 }
 
 if ! key_trusted; then
+  say "Trusting the signing key..."
   printf '\nThe repository is signed with this key:\n  %s\n' "$REPO_FINGERPRINT"
   printf 'xbps will ask you to trust it.\n\n'
   if { exec 3</dev/tty; } 2>/dev/null; then
@@ -144,11 +160,13 @@ if ! key_trusted; then
   fi
 fi
 
-step "installing vpa"
 pkgs=(vpa)
 if [[ $WITH_AUR -eq 1 ]]; then
   pkgs+=("${EXTRA_DEPS[@]}")
-  step "including AUR build tools: ${EXTRA_DEPS[*]}"
+  say "Installing the package and AUR build tools..."
+  step "${pkgs[*]}"
+else
+  say "Installing the package..."
 fi
 
 if ! quietly_out=$(sudo xbps-install -Sy "${pkgs[@]}" 2>&1); then
@@ -176,6 +194,7 @@ command -v vpa >/dev/null 2>&1 || die "vpa installed but isn't on PATH -- expect
 # expected value visible so it can be compared elsewhere.
 verify_sha256() {
   command -v sha256sum >/dev/null 2>&1 || { step "sha256sum unavailable, skipping"; return 0; }
+  say "Verifying the download..."
 
   local arch pkgver cached sums expected actual
   arch=$(xbps-uhelper arch 2>/dev/null) || return 0
@@ -228,6 +247,4 @@ for stale in "$HOME/.local/bin/vpa" /usr/local/bin/vpa; do
   fi
 done
 
-if [[ $FIRST_INSTALL -eq 1 ]]; then
-  printf '\nTo get started, run "vpa" in your terminal\n'
-fi
+printf '\nTo get started, run "vpa" in your terminal\n'
