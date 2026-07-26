@@ -2,8 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"vpa/internal/ui"
 	"vpa/internal/xbpsutil"
@@ -26,13 +32,13 @@ func (a *App) cmdDowngrade(args []string) error {
 		want = args[1]
 	}
 
-	versions, err := xbpsutil.CachedVersions(name)
+	versions, err := availableVersions(name)
 	if err != nil {
 		return err
 	}
 	if len(versions) == 0 {
-		ui.Warn("no cached versions of '%s' to go back to", name)
-		ui.Info("vpa can only downgrade to a version already in %s, which means one you've installed before.", xbpsutil.CacheDir)
+		ui.Warn("no older versions of '%s' available to go back to", name)
+		ui.Info("vpa looks in %s for versions you've installed before, and in your repositories for older builds they still publish.", xbpsutil.CacheDir)
 		ui.Info("'vpa cleanup' clears that cache, so anything removed by it is gone as a rollback target.")
 		return fmt.Errorf("nothing to downgrade '%s' to", name)
 	}
@@ -58,7 +64,11 @@ func (a *App) cmdDowngrade(args []string) error {
 	}
 	fmt.Println()
 	for i, v := range older {
-		fmt.Printf("  %d) %s %s\n", i+1, ui.Bold(name), v.Version)
+		where := "cached"
+		if isRemote(v) {
+			where = "download"
+		}
+		fmt.Printf("  %d) %s %s  (%s)\n", i+1, ui.Bold(name), v.Version, where)
 	}
 	fmt.Println()
 
@@ -72,6 +82,100 @@ func (a *App) cmdDowngrade(args []string) error {
 		return fmt.Errorf("'%s' isn't one of the listed numbers", line)
 	}
 	return a.doDowngrade(name, older[idx-1], current)
+}
+
+// availableVersions collects everything a package could be rolled back to:
+// the files xbps already downloaded, plus older builds still published by a
+// repository. The cache wins on duplicates, since a local file needs no
+// download and no signature round trip.
+func availableVersions(name string) ([]xbpsutil.CachedPackage, error) {
+	cached, err := xbpsutil.CachedVersions(name)
+	if err != nil {
+		return nil, err
+	}
+	have := make(map[string]bool, len(cached))
+	for _, v := range cached {
+		have[v.Version] = true
+	}
+
+	for _, v := range xbpsutil.RemoteVersions(name, fetchText) {
+		if !have[v.Version] {
+			have[v.Version] = true
+			cached = append(cached, v)
+		}
+	}
+	sort.Slice(cached, func(i, j int) bool {
+		return xbpsutil.CompareVersions(cached[i].Version, cached[j].Version) > 0
+	})
+	return cached, nil
+}
+
+// fetchText retrieves a URL as text, for reading a repository's directory
+// listing. Short timeout: a repository that doesn't answer quickly just
+// doesn't contribute versions.
+func fetchText(url string) (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%s: %s", url, resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	return string(body), err
+}
+
+// downloadPackage fetches a package and its detached signature into a
+// temporary directory, returning the local path and a cleanup function.
+//
+// The signature is fetched alongside deliberately: without it the staged
+// repository would be unsigned, which is a quieter outcome than it sounds
+// -- xbps does not enforce signatures on local repositories, so a missing
+// .sig2 would downgrade the check to nothing rather than fail loudly.
+func downloadPackage(p xbpsutil.CachedPackage) (string, func(), error) {
+	dir, err := os.MkdirTemp("", "vpa-dl-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { os.RemoveAll(dir) }
+
+	local := filepath.Join(dir, filepath.Base(p.Path))
+	if err := downloadTo(p.Path, local); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("couldn't download %s: %w", p.Path, err)
+	}
+	if err := downloadTo(p.Path+".sig2", local+".sig2"); err != nil {
+		ui.Warn("no signature published for this package -- installing it unverified")
+	}
+	return local, cleanup, nil
+}
+
+func downloadTo(url, dest string) error {
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s", resp.Status)
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+// isRemote reports whether a candidate has to be downloaded first.
+func isRemote(p xbpsutil.CachedPackage) bool {
+	return strings.HasPrefix(p.Path, "http://") || strings.HasPrefix(p.Path, "https://")
 }
 
 // installVersion handles an explicitly named version.
@@ -98,11 +202,25 @@ func (a *App) doDowngrade(name string, target xbpsutil.CachedPackage, current st
 	// updated away from, and nothing stops the next system upgrade putting
 	// the new version straight back.
 	ui.Info("about to replace %s %s with %s", name, current, target.Version)
+	if isRemote(target) {
+		ui.Info("downloading it from %s", target.Path)
+	}
 	if !ui.Confirm("Downgrade %s to %s?", name, target.Version) {
 		return fmt.Errorf("cancelled -- '%s' was not changed", name)
 	}
 
-	if err := xbpsutil.InstallFiles(target.Path); err != nil {
+	path := target.Path
+	if isRemote(target) {
+		local, cleanup, err := downloadPackage(target)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		path = local
+	}
+
+	pkgver := fmt.Sprintf("%s-%s", name, target.Version)
+	if err := xbpsutil.InstallPkgFile(path, pkgver); err != nil {
 		return fmt.Errorf("downgrade failed: %w", err)
 	}
 

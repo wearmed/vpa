@@ -17,6 +17,25 @@ concurrency, and packaging.
 
 ## Install
 
+From the package repository, so vpa updates with the rest of your system:
+
+```sh
+sudo vpa addrepo https://vpa.wearmed.xyz/repo   # or write it into /etc/xbps.d
+sudo xbps-install -S vpa
+```
+
+xbps will show the repository's signing fingerprint the first time and ask
+you to trust it:
+
+```
+77:a8:39:cc:3d:df:8c:a7:12:d5:fe:56:d2:fb:86:13
+```
+
+Packages are published for `x86_64`, `x86_64-musl`, `aarch64` and
+`aarch64-musl`.
+
+Or build it from source instead:
+
 ```sh
 curl -fsSL https://vpa.wearmed.xyz/install.sh | bash
 ```
@@ -24,6 +43,10 @@ curl -fsSL https://vpa.wearmed.xyz/install.sh | bash
 Checks you're on Void, installs `go`/`git`/`curl`/`fakeroot` if missing,
 builds a static binary, and symlinks it into `~/.local/bin` (`--system` for
 `/usr/local/bin`). Safe to re-run.
+
+Don't do both. `~/.local/bin` usually comes before `/usr/bin` in `PATH`, so
+a source install shadows the packaged one and `vpa update` looks like it's
+doing nothing. `vpa update` warns if it spots this.
 
 ## Usage
 
@@ -123,6 +146,27 @@ mystuff: some-package another-package
 A category you define replaces the built-in one of that name, so copy a line
 before editing it. `CATEGORY_URL=` in `vpa.conf` points the refresh
 somewhere else.
+
+### Downgrading
+
+```sh
+vpa downgrade firefox          # pick from a list
+vpa downgrade firefox 152.0_1  # go straight to a version
+```
+
+A repository index only ever describes the *current* version of a package,
+so there's normally nothing to install an older one from. vpa looks in two
+places instead:
+
+- `/var/cache/xbps`, which keeps every package file xbps has downloaded —
+  so any version you've run before is still there, and rolling back to it
+  needs no network at all
+- the repositories you have configured, for older builds they still publish
+  even though the index has moved on (vpa's own repo keeps every release)
+
+`vpa cleanup` empties that cache, which also throws away what you could roll
+back to. After a downgrade, the next `vpa update` will upgrade the package
+straight back — `vpa hold <pkg>` stops that.
 
 ### Neglected AUR packages
 

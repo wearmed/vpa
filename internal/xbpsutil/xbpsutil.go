@@ -4,6 +4,7 @@ package xbpsutil
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -552,6 +553,78 @@ func CompareVersions(a, b string) int {
 	return strings.Compare(a, b)
 }
 
+// RepoURLs lists the remote repositories xbps is configured to use.
+// Local paths are skipped: they're already browsable as files.
+func RepoURLs() []string {
+	var urls []string
+	seen := map[string]bool{}
+	for _, dir := range []string{"/etc/xbps.d", "/usr/share/xbps.d"} {
+		files, _ := filepath.Glob(filepath.Join(dir, "*.conf"))
+		for _, f := range files {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "#") {
+					continue
+				}
+				_, url, ok := strings.Cut(line, "repository=")
+				if !ok {
+					continue
+				}
+				url = strings.TrimSpace(url)
+				if !strings.HasPrefix(url, "http") || seen[url] {
+					continue
+				}
+				seen[url] = true
+				urls = append(urls, url)
+			}
+		}
+	}
+	return urls
+}
+
+// pkgFileRe matches a package filename in an HTML directory listing.
+var pkgFileRe = regexp.MustCompile(`([A-Za-z0-9._+-]+?)-([^-\s"'<>]+_[0-9]+)\.([a-z0-9_-]+)\.xbps`)
+
+// RemoteVersions finds older builds of a package still sitting in a
+// repository's directory, which a repository index no longer mentions.
+//
+// This only works where the server exposes a directory listing. Repositories
+// that don't are skipped silently -- it's an opportunistic extra, not
+// something to fail a downgrade over.
+func RemoteVersions(name string, fetch func(string) (string, error)) []CachedPackage {
+	arch, err := Arch()
+	if err != nil {
+		return nil
+	}
+	var out []CachedPackage
+	seen := map[string]bool{}
+	for _, base := range RepoURLs() {
+		body, err := fetch(strings.TrimSuffix(base, "/") + "/")
+		if err != nil {
+			continue
+		}
+		for _, m := range pkgFileRe.FindAllStringSubmatch(body, -1) {
+			if m[1] != name || m[3] != arch || seen[m[2]] {
+				continue
+			}
+			seen[m[2]] = true
+			out = append(out, CachedPackage{
+				Name:    name,
+				Version: m[2],
+				Path:    strings.TrimSuffix(base, "/") + "/" + m[0],
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return CompareVersions(out[i].Version, out[j].Version) > 0
+	})
+	return out
+}
+
 // InstalledVersion returns the installed version of a package, or "".
 func InstalledVersion(name string) string {
 	out, err := sysutil.Output("xbps-query", "-p", "pkgver", name)
@@ -562,14 +635,55 @@ func InstalledVersion(name string) string {
 	return version
 }
 
-// InstallFiles installs specific package files, overwriting what's there.
+// InstallPkgFile installs one specific package file.
 //
-// -f is required: without it xbps refuses to "downgrade" to an older
-// version. --ignore-file-conflicts is deliberately not passed, so a genuine
-// conflict still stops the install.
-func InstallFiles(paths ...string) error {
-	args := append([]string{"xbps-install", "-f", "-y"}, paths...)
-	return sysutil.RunInteractive("sudo", args...)
+// xbps-install only ever resolves names against a repository -- it takes
+// neither a path nor a URL -- so the file is staged into a throwaway
+// directory that gets indexed and used as a one-package repository. This is
+// the same mechanism vpa already uses for packages it builds from the AUR.
+//
+// -f is required on top of that: without it xbps declines to replace an
+// installed package with an older version.
+func InstallPkgFile(path, pkgver string) error {
+	sysutil.RequireBin("xbps-rindex", "xbps")
+
+	stage, err := os.MkdirTemp("", "vpa-downgrade-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+
+	local := filepath.Join(stage, filepath.Base(path))
+	if err := copyFile(path, local); err != nil {
+		return err
+	}
+	// The detached signature travels with the package where one exists, so
+	// the staged repository is as verifiable as the one it came from.
+	if err := copyFile(path+".sig2", local+".sig2"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := Rindex(stage); err != nil {
+		return fmt.Errorf("couldn't index the staged package: %w", err)
+	}
+	return ForceInstall(stage, pkgver)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 // RemoveRecursive removes packages along with dependencies nothing else needs.
