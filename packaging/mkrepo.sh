@@ -142,8 +142,20 @@ if [[ "${1:-}" == "--publish" ]]; then
   info "publishing to $PUBLISH_HOST:$PUBLISH_PATH"
   # shellcheck disable=SC2029  # expanding the path locally is the intent
   ssh "$PUBLISH_HOST" "mkdir -p '$PUBLISH_PATH'"
-  # Not --delete: an older vpa release someone pinned should keep working.
-  rsync -av --chmod=D755,F644 "$REPO_DIR/" "$PUBLISH_HOST:$PUBLISH_PATH/"
+
+  # Two passes, packages before repodata. The index is what tells a client a
+  # version exists, so publishing it first opens a window where anyone
+  # syncing is told to fetch a package that is still uploading -- their
+  # upgrade then fails partway, after xbps has already removed the old
+  # version. Uploading the packages first closes that window.
+  #
+  # Not --delete: an older release someone pinned should keep working.
+  rsync -av --chmod=D755,F644 \
+    --exclude='*-repodata' --exclude='sha256sums.txt' \
+    "$REPO_DIR/" "$PUBLISH_HOST:$PUBLISH_PATH/"
+  rsync -av --chmod=D755,F644 \
+    --include='*-repodata' --include='sha256sums.txt' --exclude='*' \
+    "$REPO_DIR/" "$PUBLISH_HOST:$PUBLISH_PATH/"
   ok "published"
   echo
   info "install with:"
